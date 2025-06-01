@@ -1,6 +1,10 @@
 // set as java application
 apply plugin: 'application'
 
+repositories {
+  mavenCentral()
+}
+
 dependencies {
   implementation('com.google.code.gson:gson:2.10.1')
 }

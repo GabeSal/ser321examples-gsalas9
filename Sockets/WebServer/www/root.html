@@ -1,15 +1,37 @@
 <html>
-	<head>
-		<link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
-	</head>
-	<body>
-		<h3>You can make the following GET requests<h3>
-		<ul>
-			<li>/file/sample.html -- returns the content of the file sample.html</li>
-			<li>/json -- returns a json of the /random request</a></li>
-			<li>/random -- returns index.html</a></li>
-		</ul>
-		<h3>File Structure in www (you can use /file/www/FILENAME):</h3>
-		${links}
-	</body>
+<head>
+  <title>Java WebServer Home</title>
+  <link rel="shortcut icon" href="data:image/x-icon;," type="image/x-icon">
+  <style>
+    body { font-family: Arial, sans-serif; margin: 2em; }
+    ul { line-height: 1.8; }
+    code { background: #f4f4f4; padding: 2px 6px; border-radius: 4px; }
+  </style>
+</head>
+<body>
+  <h1>Welcome to the Java WebServer</h1>
+
+  <h2>Supported GET Requests</h2>
+  <ul>
+    <li><code>/random</code> – Loads the image viewer page (index.html)</li>
+    <li><code>/json</code> – Returns a random image and label as JSON</li>
+    <li><code>/file/sample.html</code> – Attempts to return the contents of <code>sample.html</code></li>
+    <li><code>/multiply?num1=3&num2=4</code> – Multiplies two numbers  
+        → <a href="/multiply?num1=3&num2=4">Example</a></li>
+    <li><code>/github?query=users/amehlhase316/repos</code> – Fetches and displays GitHub repository data  
+        → <a href="/github?query=users/amehlhase316/repos">Example</a></li>
+    <li><code>/reverse?text=hello</code> – Reverses a string  
+        → <a href="/reverse?text=hello">Example</a></li>
+    <li><code>/convert?temp=100&type=ftoc</code> – Converts Fahrenheit to Celsius  
+        → <a href="/convert?temp=100&type=ftoc">Example</a></li>
+    <li><code>/convert?temp=37&type=ctof</code> – Converts Celsius to Fahrenheit  
+        → <a href="/convert?temp=37&type=ctof">Example</a></li>
+  </ul>
+
+  <h2>📁 Files in the <code>www/</code> directory</h2>
+  <p>You can use <code>/file/www/FILENAME</code> to access files directly. Example: <code>/file/www/index.html</code></p>
+  ${links}
+
+  <p style="margin-top: 2em; font-size: 0.9em;">Page rendered by <strong>FunWebServer</strong> | Port 9000</p>
+</body>
 </html>

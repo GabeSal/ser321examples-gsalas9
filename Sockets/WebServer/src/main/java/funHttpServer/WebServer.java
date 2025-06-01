@@ -17,6 +17,7 @@ write a response back
 package funHttpServer;
 
 import com.google.gson.*;
+
 import java.io.*;
 import java.net.*;
 import java.util.ArrayList;
@@ -148,7 +149,7 @@ class WebServer {
         } else if (request.equalsIgnoreCase("json")) {
           // shows the JSON of a random image and sets the header name for that image
 
-          // pick a index from the map
+          // pick an index from the map
           int index = random.nextInt(_images.size());
 
           // pull out the information
