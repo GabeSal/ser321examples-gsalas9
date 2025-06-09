@@ -13,19 +13,24 @@ public class SockServer {
 	static Riddle[] riddles = new Riddle[5]; // stores all riddles
 
 	public static void main (String args[]) {
-		Socket sock;
+		if (args.length != 1) {
+			System.out.println("Expected arguments: <port(int)>");
+			System.exit(1);
+		}
+
+		Socket client;
 		try {
 			//setting some riddles here, you can add more, change them, store them in a different way
 			riddles[0] = new Riddle("I dry as I get wetter.", "Towel");
 			riddles[1] = new Riddle("The building that has the most stories.  ", "Library");
 			riddles[2] = new Riddle("The pot called me black. I said “look who’s talking?!” Then, I made some tea.", "Kettle");
 			riddles[3] = new Riddle("Seeing double? Check me to spot your doppelganger.", "Mirror");
-			riddles[4] = new Riddle("I have eyes but cannot see.", "Potatoe");
+			riddles[4] = new Riddle("I have eyes but cannot see.", "Potato");
 
-
+			int port = Integer.parseInt(args[0]);
 			//opening the socket here, just hard coded since this is just a bas example
-			ServerSocket serv = new ServerSocket(8888); // TODO, should not be hardcoded
-			System.out.println("Server ready for connetion");
+			ServerSocket serv = new ServerSocket(port);
+			System.out.println("Server ready for connection");
 
 			// placeholder for the person who wants to play a game
 			String name = "";
@@ -34,47 +39,88 @@ public class SockServer {
 			// read in one object, the message. we know a string was written only by knowing what the client sent. 
 			// must cast the object from Object to desired type to be useful
 			while(true) {
-				sock = serv.accept(); // blocking wait
+				client = serv.accept(); // blocking wait
+				System.out.println("Client connected");
 
-				// could totally use other input outpur streams here
-				ObjectInputStream in = new ObjectInputStream(sock.getInputStream());
-				OutputStream out = sock.getOutputStream();
+				// Text-based streams
+				BufferedReader in = new BufferedReader(new InputStreamReader(client.getInputStream()));
+				PrintWriter out = new PrintWriter(client.getOutputStream(), true);
 
-				String s = (String) in.readObject();
-				JSONObject json = new JSONObject(s); // the requests that is received
+				String line = in.readLine();
+				if (line == null) continue;
 
+				JSONObject request = new JSONObject(line); // the requests that is received
 				JSONObject response = new JSONObject();
 
-				// you should adapt this part, this is jsut to show you how you can send a message
-				if (json.getString("type").equals("start")){
-					
-					System.out.println("- Got a start");
-				
-					response.put("type","hello" );
-					response.put("value","Hello, please tell me your name." );
+				String type = request.optString("type", "");
 
-					sendImg("img/hi.png", response); // calling a method that will manipulate the image and will make it send ready
-					
-				} else if (json.getString("type").equals("riddle")){
-					Random rand = new Random();
-					Riddle currentRiddle = riddles[rand.nextInt(4)]; // holds the current riddle object
-					response.put("riddle",currentRiddle.getRiddle());
-				} else if (json.getString("type").equals("name")){
-					response.put("name", json.getString("name"));
+				// Available actions
+				switch (type) {
+					case "start":
+						response.put("type", "hello");
+						name = request.optString("name", "Player");
+						response.put("value", "Hello " + name + ", welcome to the game!");
+						sendImg("img/hi.png", response);
+						break;
+
+					case "play":
+						JSONObject riddleJson = serveRandomRiddle();
+						response.put("type", "play");
+						response.put("riddle", riddleJson.getString("riddle"));
+						sendImg("img/play.jpg", response);
+						break;
+
+					case "leaderboard":
+						response.put("type", "leaderboard");
+						response.put("entries", new JSONArray()  // placeholder values
+								.put(new JSONObject().put("name", "Alice").put("score", 3))
+								.put(new JSONObject().put("name", "Bob").put("score", 2)));
+						break;
+
+					case "addRiddle":
+						String newRiddle = request.optString("riddle");
+						String newAnswer = request.optString("answer");
+						// Here you'd add to your riddles[] or dynamic list
+						response.put("type", "addRiddle");
+						response.put("message", "Riddle added: " + newRiddle);
+						break;
+
+					case "vote":
+						response.put("type", "vote");
+						response.put("message", "Vote received!");
+						break;
+
+					case "quit":
+						response.put("type", "quit");
+						response.put("message", "Thanks for playing!");
+						break;
+
+					default:
+						response.put("type", "error");
+						response.put("message", "Unknown request type.");
+						break;
 				}
-				else {
-					System.out.println("not sure what you meant");
-					response.put("type","error" );
-					response.put("message","unknown response" );
-				}
-				PrintWriter outWrite = new PrintWriter(sock.getOutputStream(), true); // using a PrintWriter here, you could also use and ObjectOutputStream or anything you fancy
-				outWrite.println(response.toString());
+
+				out.println(response.toString());
+				in.close();
+				out.close();
+				client.close();
 			}
-			
-		} catch(Exception e) {e.printStackTrace();}
+		} catch(Exception e) {
+			e.printStackTrace();
+		}
 	}
 
-	/* TODO this is for you to implement, I just put a place holder here */
+	private static JSONObject serveRandomRiddle() {
+		Random rand = new Random();
+		Riddle current = riddles[rand.nextInt(riddles.length)];
+
+		JSONObject obj = new JSONObject();
+		obj.put("riddle", current.getRiddle());
+		obj.put("answer", current.getAnswer());  // Optional: useful for validation later
+		return obj;
+	}
+
 	public static JSONObject sendImg(String filename, JSONObject obj) throws Exception {
 		File file = new File(filename);
 
@@ -82,7 +128,7 @@ public class SockServer {
 			// import image
 			// I did not use the Advanced Custom protocol
 			// I read in the image and translated it into basically into a string and send it back to the client where I then decoded again
-			obj.put("image", "Pretend I am this image: " + filename);
+			//obj.put("image", "Pretend I am this image: " + filename);
 		} 
 		return obj;
 	}

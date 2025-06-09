@@ -18,22 +18,6 @@ class SockClient {
 
   public static void main (String args[]) {
 
-    String hostProp = System.getProperty("host");
-    String portProp = System.getProperty("port");
-
-    if (hostProp != null) {
-      host = hostProp;
-    }
-
-    if (portProp != null) {
-      try {
-        port = Integer.parseInt(portProp);
-      } catch (NumberFormatException e) {
-        System.out.println("[Port] must be an integer");
-        System.exit(1);
-      }
-    }
-
     if (args.length != 2) {
       System.out.println("Expected arguments: <host(String)> <port(int)>");
       System.exit(1);
