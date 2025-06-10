@@ -1,6 +1,7 @@
 package Assign32starter;
 import java.net.*;
-import java.util.Random;
+import java.nio.file.Files;
+import java.util.*;
 import java.io.*;
 import org.json.*;
 
@@ -10,7 +11,12 @@ import org.json.*;
  * Ser321 Foundations of Distributed Software Systems
  */
 public class SockServer {
-	static Riddle[] riddles = new Riddle[5]; // stores all riddles
+	static List<Riddle> riddles = new ArrayList<>(); // stores all riddles
+	static Queue<Riddle> pendingRiddles = new LinkedList<>() {
+	}; // riddles pending submission to the game
+	static final String RIDDLE_DIR = "riddles/";
+	static final String RIDDLE_FILE = RIDDLE_DIR + "riddles.json";
+	static final String PENDING_FILE = RIDDLE_DIR + "pending_riddles.json";
 
 	public static void main (String args[]) {
 		if (args.length != 1) {
@@ -18,14 +24,12 @@ public class SockServer {
 			System.exit(1);
 		}
 
+		ensureDirectoryExists();
+		loadRiddles();
+		loadPendingRiddles();
+
 		Socket client;
 		try {
-			//setting some riddles here, you can add more, change them, store them in a different way
-			riddles[0] = new Riddle("I dry as I get wetter.", "Towel");
-			riddles[1] = new Riddle("The building that has the most stories.  ", "Library");
-			riddles[2] = new Riddle("The pot called me black. I said “look who’s talking?!” Then, I made some tea.", "Kettle");
-			riddles[3] = new Riddle("Seeing double? Check me to spot your doppelganger.", "Mirror");
-			riddles[4] = new Riddle("I have eyes but cannot see.", "Potato");
 
 			int port = Integer.parseInt(args[0]);
 			//opening the socket here, just hard coded since this is just a bas example
@@ -78,16 +82,51 @@ public class SockServer {
 						break;
 
 					case "addRiddle":
-						String newRiddle = request.optString("riddle");
-						String newAnswer = request.optString("answer");
-						// Here you'd add to your riddles[] or dynamic list
-						response.put("type", "addRiddle");
-						response.put("message", "Riddle added: " + newRiddle);
+						String newRiddle = request.optString("riddle", "");
+						String newAnswer = request.optString("answer", "");
+
+						if (!newRiddle.isEmpty() && !newAnswer.isEmpty()) {
+							pendingRiddles.add(new Riddle(newRiddle, newAnswer));
+							savePendingRiddles();
+							response.put("type", "addRiddle");
+							response.put("message", "New riddle added to pending list!");
+							//sendImg("img/add.png", response);
+						} else {
+							response.put("type", "error");
+							response.put("message", "Riddle or answer was missing.");
+						}
+						break;
+
+					case "getVoteRiddle":
+						if (!pendingRiddles.isEmpty()) {
+							Riddle candidate = pendingRiddles.peek();
+							response.put("type", "vote");
+							response.put("riddle", candidate.getRiddle());
+							response.put("answer", candidate.getAnswer());
+							//sendImg("img/vote.png", response);
+						} else {
+							response.put("message", "No riddles available for voting.");
+						}
 						break;
 
 					case "vote":
-						response.put("type", "vote");
-						response.put("message", "Vote received!");
+						String vote = request.optString("vote", "").toLowerCase();
+						if (!pendingRiddles.isEmpty()) {
+							Riddle candidate = pendingRiddles.poll();
+							if (vote.equals("yes")) {
+								riddles.add(candidate);
+								saveRiddles();
+								response.put("message", "Riddle approved and added to the game!");
+							} else {
+								response.put("message", "Riddle rejected and removed.");
+							}
+							savePendingRiddles();
+							response.put("type", "vote-result");
+							//sendImg("img/vote.png", response);
+						} else {
+							response.put("type", "vote-result");
+							response.put("message", "No riddle to vote on.");
+						}
 						break;
 
 					case "quit":
@@ -113,7 +152,7 @@ public class SockServer {
 
 	private static JSONObject serveRandomRiddle() {
 		Random rand = new Random();
-		Riddle current = riddles[rand.nextInt(riddles.length)];
+		Riddle current = riddles.get(rand.nextInt(riddles.size()));
 
 		JSONObject obj = new JSONObject();
 		obj.put("riddle", current.getRiddle());
@@ -125,11 +164,100 @@ public class SockServer {
 		File file = new File(filename);
 
 		if (file.exists()) {
-			// import image
-			// I did not use the Advanced Custom protocol
-			// I read in the image and translated it into basically into a string and send it back to the client where I then decoded again
-			//obj.put("image", "Pretend I am this image: " + filename);
-		} 
+			obj.put("image", "Pretend I am this image: " + filename);
+		}
 		return obj;
 	}
+
+	private static void ensureDirectoryExists() {
+		File dir = new File(RIDDLE_DIR);
+		if (!dir.exists()) {
+			dir.mkdirs();
+		}
+	}
+
+	private static void initializeDefaultRiddles() {
+		riddles.clear();  // in case called more than once
+
+		riddles.add(new Riddle("I dry as I get wetter.", "Towel"));
+		riddles.add(new Riddle("The building that has the most stories.", "Library"));
+		riddles.add(new Riddle("The pot called me black. I said “look who’s talking?!” Then, I made some tea.", "Kettle"));
+		riddles.add(new Riddle("Seeing double? Check me to spot your doppelganger.", "Mirror"));
+		riddles.add(new Riddle("I have eyes but cannot see.", "Potato"));
+	}
+
+	private static void loadRiddles() {
+		ensureDirectoryExists();
+		File file = new File(RIDDLE_FILE);
+
+		if (!file.exists()) {
+			System.out.println("No riddles file found. Initializing with default riddles.");
+			initializeDefaultRiddles();
+			saveRiddles();
+			return;
+		}
+
+		try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+			String content = reader.lines().reduce("", (acc, line) -> acc + line);
+			JSONArray arr = new JSONArray(content);
+
+			riddles.clear();
+			for (int i = 0; i < arr.length(); i++) {
+				JSONObject obj = arr.getJSONObject(i);
+				riddles.add(new Riddle(obj.getString("riddle"), obj.getString("answer")));
+			}
+		} catch (IOException | JSONException e) {
+			System.err.println("Failed to load riddles.json. Falling back to default riddles.");
+			e.printStackTrace();
+			initializeDefaultRiddles();
+		}
+	}
+
+	private static void loadPendingRiddles() {
+		ensureDirectoryExists();
+		File file = new File(PENDING_FILE);
+
+		if (!file.exists()) {
+			pendingRiddles.clear();
+			return;
+		}
+
+		try {
+			String content = new String(Files.readAllBytes(file.toPath()));
+			JSONArray arr = new JSONArray(content);
+			for (int i = 0; i < arr.length(); i++) {
+				JSONObject obj = arr.getJSONObject(i);
+				pendingRiddles.add(new Riddle(obj.getString("riddle"), obj.getString("answer")));
+			}
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static void saveRiddles() {
+		ensureDirectoryExists();
+		try (PrintWriter writer = new PrintWriter(RIDDLE_FILE)) {
+			JSONArray arr = new JSONArray();
+			for (Riddle r : riddles) {
+				arr.put(new JSONObject().put("riddle", r.getRiddle()).put("answer", r.getAnswer()));
+			}
+			writer.println(arr.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
+	private static void savePendingRiddles() {
+		ensureDirectoryExists();
+		try (PrintWriter writer = new PrintWriter(PENDING_FILE)) {
+			JSONArray arr = new JSONArray();
+			for (Riddle r : pendingRiddles) {
+				arr.put(new JSONObject().put("riddle", r.getRiddle()).put("answer", r.getAnswer()));
+			}
+			writer.println(arr.toString());
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
+	}
+
 }

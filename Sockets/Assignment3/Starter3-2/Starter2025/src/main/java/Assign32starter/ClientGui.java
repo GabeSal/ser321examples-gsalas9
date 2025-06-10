@@ -470,9 +470,9 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 			try {
 				open();
 				JSONObject req = new JSONObject()
-						.put("type", "addRiddle")
-						.put("riddle", riddleField.getText())
-						.put("answer", answerField.getText());
+					.put("type", "addRiddle")
+					.put("riddle", riddleField.getText())
+					.put("answer", answerField.getText());
 				writer.println(req.toString());
 
 				JSONObject res = new JSONObject(reader.readLine());
@@ -499,53 +499,81 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 	}
 
 	private void showRiddleVoting() {
-		JDialog dialog = new JDialog((JDialog) null, "Vote on Riddle", true);
-		dialog.setLayout(new GridBagLayout());
-		dialog.setSize(300, 150);
+		try {
+			open();
+			JSONObject req = new JSONObject().put("type", "getVoteRiddle");
+			writer.println(req.toString());
 
-		GridBagConstraints c = new GridBagConstraints();
-		c.fill = GridBagConstraints.HORIZONTAL;
-		c.gridx = 0;
-		c.gridy = 0;
+			JSONObject res = new JSONObject(reader.readLine());
+			close();
 
-		JLabel label = new JLabel("Voting is not fully implemented.");
-		dialog.add(label, c);
+			if (res.has("riddle")) {
+				String riddleText = res.getString("riddle");
+				String answerText = res.getString("answer");
+				//String image = res.optString("image", "img/vote.png");
 
-		c.gridy++;
-		JPanel buttonPanel = new JPanel();
-		JButton voteBtn = new JButton("Vote");
-		JButton cancelBtn = new JButton("Cancel");
+				// Display the riddle to vote on
+				JDialog dialog = new JDialog((JDialog) null, "Vote on Riddle", true);
+				dialog.setLayout(new GridBagLayout());
+				dialog.setSize(400, 200);
+				GridBagConstraints c = new GridBagConstraints();
+				c.gridx = 0;
+				c.gridy = 0;
+				c.gridwidth = 2;
 
-		voteBtn.addActionListener(e -> {
-			try {
-				open();
-				JSONObject req = new JSONObject()
-						.put("type", "vote")
-						.put("riddleId", "exampleId")
-						.put("vote", "up");
-				writer.println(req.toString());
+				dialog.add(new JLabel("<html><b>Riddle:</b> " + riddleText + "<br><b>Answer:</b> " + answerText + "</html>"), c);
 
-				JSONObject res = new JSONObject(reader.readLine());
-				outputPanel.appendOutput(res.optString("message", "No response message"));
-				close();
-			} catch (Exception ex) {
-				ex.printStackTrace();
+				// Voting Buttons
+				JButton yesBtn = new JButton("Yes");
+				JButton noBtn = new JButton("No");
+				JPanel btnPanel = new JPanel();
+				btnPanel.add(yesBtn);
+				btnPanel.add(noBtn);
+
+				c.gridy++;
+				dialog.add(btnPanel, c);
+
+				// Voting actions
+				yesBtn.addActionListener(e -> {
+					submitVote("yes");
+					dialog.dispose();
+					showMainMenu();
+				});
+
+				noBtn.addActionListener(e -> {
+					submitVote("no");
+					dialog.dispose();
+					showMainMenu();
+				});
+
+				dialog.setLocationRelativeTo(null);
+				dialog.setVisible(true);
+
+				//insertImage(image, 0, 0);
+			} else {
+				outputPanel.appendOutput(res.optString("message", "No riddles to vote on."));
+				showMainMenu();
 			}
-			dialog.dispose();
+		} catch (Exception e) {
+			e.printStackTrace();
 			showMainMenu();
-		});
+		}
+	}
 
-		cancelBtn.addActionListener(e -> {
-			dialog.dispose();
-			showMainMenu();
-		});
+	private void submitVote(String vote) {
+		try {
+			open();
+			JSONObject request = new JSONObject()
+				.put("type", "vote")
+				.put("vote", vote);
+			writer.println(request.toString());
 
-		buttonPanel.add(voteBtn);
-		buttonPanel.add(cancelBtn);
-		dialog.add(buttonPanel, c);
-
-		dialog.setLocationRelativeTo(null);
-		dialog.setVisible(true);
+			JSONObject response = new JSONObject(reader.readLine());
+			outputPanel.appendOutput(response.optString("message", "Vote submitted."));
+			close();
+		} catch (Exception e) {
+			e.printStackTrace();
+		}
 	}
 
 	private void quitGame() {
