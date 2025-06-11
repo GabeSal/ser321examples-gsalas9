@@ -1,17 +1,18 @@
 package Assign32starter;
 
-import java.awt.Dimension;
+import java.awt.*;
 
 import org.json.*;
 
 import java.awt.event.WindowAdapter;
 import java.awt.event.WindowEvent;
-import java.awt.GridBagConstraints;
-import java.awt.GridBagLayout;
+import java.awt.image.BufferedImage;
 import java.io.*;
 import java.net.Socket;
 import java.net.UnknownHostException;
+import java.util.Base64;
 
+import javax.imageio.ImageIO;
 import javax.swing.*;
 
 /**
@@ -47,7 +48,11 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 
 	String host = "localhost";
 	int port = 9000;
+
 	String playerName;
+	String currentRiddle = "";
+	String currentAnswer = "";
+	int currentScore = 0;
 
 	/**
 	 * Construct dialog
@@ -81,48 +86,6 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 		showMainMenu();
 	}
 
-	public void buildGameGui() throws IOException {
-		frame = new JDialog();
-		frame.setLayout(new GridBagLayout());
-		frame.setMinimumSize(new Dimension(640, 640));
-		frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
-
-		// Top image grid
-		picPanel = new PicturePanel();
-		GridBagConstraints c = new GridBagConstraints();
-		c.gridx = 0;
-		c.gridy = 0;
-		c.weighty = 0.25;
-		frame.add(picPanel, c);
-
-		// Output + input area
-		c = new GridBagConstraints();
-		c.gridx = 0;
-		c.gridy = 1;
-		c.weighty = 0.65;
-		c.weightx = 1;
-		c.fill = GridBagConstraints.BOTH;
-		outputPanel = new OutputPanel();
-		outputPanel.addEventHandlers(this);
-		frame.add(outputPanel, c);
-
-		// Back to Menu Button
-		c = new GridBagConstraints();
-		c.gridx = 0;
-		c.gridy = 2;
-		c.weighty = 0.1;
-		c.fill = GridBagConstraints.HORIZONTAL;
-		JButton backButton = new JButton("Back to Main Menu");
-		backButton.addActionListener(e -> {
-			frame.dispose();      // Close current game UI
-			showMainMenu();       // Return to menu
-		});
-		frame.add(backButton, c);
-
-		picPanel.newGame(1);
-		insertImage("img/hi.png", 0, 0);
-	}
-
 	/**
 	 * Shows the current state in the GUI
 	 * @param makeModal - true to make a modal window, false disables modal behavior
@@ -144,60 +107,112 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 	}
 
 	/**
-	 * Insert an image into the grid at position (col, row)
-	 * 
-	 * @param filename - filename relative to the root directory
-	 * @param row - the row to insert into
-	 * @param col - the column to insert into
-	 * @return true if successful, false if an invalid coordinate was provided
-	 * @throws IOException An error occured with your image file
-	 */
-	public boolean insertImage(String filename, int row, int col) throws IOException {
-		System.out.println("Image insert");
-		String error = "";
-		try {
-			// insert the image
-			if (picPanel.insertImage(filename, row, col)) {
-				// put status in output
-				return true;
-			}
-			error = "File(\"" + filename + "\") not found.";
-		} catch(PicturePanel.InvalidCoordinateException e) {
-			// put error in output
-			error = e.toString();
-		}
-		outputPanel.appendOutput(error);
-		return false;
-	}
-
-	/**
 	 * Submit button handling
-	 * 
-	 * TODO: This is where your logic will go or where you will call appropriate methods you write. 
-	 * Right now this method opens and closes the connection after every interaction, if you want to keep that or not is up to you. 
 	 */
 	@Override
 	public void submitClicked() {
-		outputPanel.appendOutput("Submit clicked.");
-		return;
+		String input = outputPanel.getInputText().trim().toLowerCase();
 
-//		try {
-//			open();
-//			String input = outputPanel.getInputText();
-//			JSONObject message = new JSONObject();
-//
-//			if (input.equals("riddle")) {
-//				message.put("type", "riddle");
-//			} else {
-//				message.put("type", "name").put("name", input);
-//			}
-//
-//			JSONObject reply = new JSONObject(reader.readLine());
-//			outputPanel.appendOutput(reply.toString());
-//			close();
-//		} catch (IOException e) {
-//			e.printStackTrace();
-//		}
+		if (input.equals("exit")) {
+			sendExitRequest();
+		} else if (input.equals("next")) {
+			sendNextRequest();
+		} else {
+			sendGuessRequest(input);
+		}
+
+		// Empty out the input text after each submission
+		outputPanel.setInputText("");
+	}
+
+	private void sendExitRequest() {
+		try {
+			open();
+			JSONObject req = new JSONObject()
+					.put("type", "exit")
+					.put("name", playerName);
+
+			writer.println(req.toString());
+			JSONObject res = new JSONObject(reader.readLine());
+
+			String message = res.optString("message", "Session ended.");
+			outputPanel.appendOutput(message);
+			close();
+			frame.dispose();
+			showMainMenu();
+		} catch (Exception e) {
+			outputPanel.appendOutput("Error exiting game: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+
+	private void sendNextRequest() {
+		try {
+			open();
+			JSONObject req = new JSONObject()
+					.put("type", "next")
+					.put("name", playerName);
+
+			writer.println(req.toString());
+			JSONObject res = new JSONObject(reader.readLine());
+
+			currentScore = res.optInt("points", currentScore);
+			currentRiddle = res.optString("riddle", currentRiddle);
+			currentAnswer = res.optString("answer", currentAnswer);
+
+			outputPanel.appendOutput("Next riddle: " + currentRiddle);
+			outputPanel.setPoints(currentScore);
+			displayImageFromBase64(res.optString("imageData", ""), 300, 240);
+			close();
+		} catch (Exception e) {
+			outputPanel.appendOutput("Error: " + e.getMessage());
+			e.printStackTrace();
+		}
+	}
+
+	private void sendGuessRequest(String input) {
+		try {
+			open();
+			JSONObject req = new JSONObject()
+					.put("type", "guess")
+					.put("guess", input)
+					.put("answer", currentAnswer)
+					.put("name", playerName);
+
+			writer.println(req.toString());
+			JSONObject res = new JSONObject(reader.readLine());
+
+			String type = res.optString("type", "");
+
+			switch (type) {
+				case "correct":
+					outputPanel.appendOutput(res.getString("message"));
+					currentScore = res.optInt("points", currentScore);
+					currentRiddle = res.optString("riddle", currentRiddle);
+					currentAnswer = res.optString("answer", currentAnswer);
+					displayImageFromBase64(res.optString("imageData", ""), 300, 240);
+					outputPanel.appendOutput("Riddle: " + currentRiddle);
+					outputPanel.setPoints(currentScore);
+					break;
+				case "incorrect":
+					outputPanel.appendOutput(res.getString("message"));
+					currentScore = res.optInt("points", currentScore);
+					outputPanel.setPoints(currentScore);
+					break;
+				case "end":
+					outputPanel.appendOutput(res.getString("message"));
+					frame.dispose();
+					showMainMenu();
+					break;
+				default:
+					outputPanel.appendOutput("Unexpected response.");
+			}
+
+			close();
+		} catch (Exception e) {
+			outputPanel.appendOutput("Error: " + e.getMessage());
+			e.printStackTrace();
+		}
 	}
 
 	/**
@@ -298,7 +313,7 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 	private void showMainMenu() {
 		JDialog menuDialog = new JDialog((JDialog) null, "Main Menu", true);
 		menuDialog.setLayout(new GridBagLayout());
-		menuDialog.setSize(400, 300);
+		menuDialog.setSize(520, 480);
 		GridBagConstraints c = new GridBagConstraints();
 		c.fill = GridBagConstraints.HORIZONTAL;
 		c.gridx = 0;
@@ -309,12 +324,22 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 		if (welcomeJson != null && welcomeJson.has("value")) {
 			JLabel welcomeLabel = new JLabel(welcomeJson.optString("value", ""));
 			welcomeLabel.setHorizontalAlignment(SwingConstants.CENTER);
+			welcomeLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+			welcomeLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
 			c.gridwidth = 2;
 			menuDialog.add(welcomeLabel, c);
 			c.gridy++;
-		}
 
-		// Show 'hi' image sent from server
+			// Handle imageData if present
+			String imageData = welcomeJson.optString("imageData", null);
+			if (imageData != null) {
+				JLabel imgLabel = getScaledImageLabel(imageData, 200, 200);
+				imgLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
+				c.gridwidth = 2;
+				menuDialog.add(imgLabel, c);
+				c.gridy++;
+			}
+		}
 
 		JButton leaderboardBtn = new JButton("View Leaderboard");
 		leaderboardBtn.addActionListener(e -> {
@@ -370,11 +395,20 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 
 			JDialog dialog = new JDialog((JDialog) null, "Leaderboard", true);
 			dialog.setLayout(new GridBagLayout());
-			dialog.setSize(300, 300);
+			dialog.setSize(480, 640);
 			GridBagConstraints c = new GridBagConstraints();
 			c.fill = GridBagConstraints.HORIZONTAL;
 			c.gridx = 0;
 			c.gridy = 0;
+
+			// Show leaderboard image
+			String imgData = res.optString("imageData", null);
+			if (imgData != null) {
+				JLabel imgLabel = getScaledImageLabel(imgData, 296, 240);
+				c.gridwidth = 2;
+				dialog.add(imgLabel, c);
+				c.gridy++;
+			}
 
 			for (int i = 0; i < entries.length(); i++) {
 				JSONObject entry = entries.getJSONObject(i);
@@ -392,6 +426,7 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 
 			dialog.setLocationRelativeTo(null);
 			dialog.setVisible(true);
+
 			close();
 		} catch (Exception e) {
 			e.printStackTrace();
@@ -415,113 +450,183 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 		}
 	}
 
+	public void buildGameGui() throws IOException {
+		frame = new JDialog();
+		frame.setLayout(new GridBagLayout());
+		frame.setMinimumSize(new Dimension(560, 640));
+		frame.setDefaultCloseOperation(WindowConstants.DISPOSE_ON_CLOSE);
+
+		// Top image grid
+		picPanel = new PicturePanel();
+		GridBagConstraints c = new GridBagConstraints();
+		c.gridx = 0;
+		c.gridy = 0;
+		c.weighty = 0.25;
+		frame.add(picPanel, c);
+
+		// Output + input area
+		c = new GridBagConstraints();
+		c.gridx = 0;
+		c.gridy = 1;
+		c.weighty = 0.65;
+		c.weightx = 1;
+		c.fill = GridBagConstraints.BOTH;
+		outputPanel = new OutputPanel();
+		outputPanel.addEventHandlers(this);
+		frame.add(outputPanel, c);
+
+		// Back to Menu Button
+		c = new GridBagConstraints();
+		c.gridx = 0;
+		c.gridy = 2;
+		c.weighty = 0.1;
+		c.fill = GridBagConstraints.HORIZONTAL;
+
+		picPanel.newGame(1);
+
+		frame.setLocationRelativeTo(null);
+	}
+
 	private void startGamePlay() {
+		try {
+			open();
+			JSONObject request = new JSONObject()
+				.put("type", "play")
+				.put("name", playerName);
+			writer.println(request.toString());
+			JSONObject response = new JSONObject(reader.readLine());
+
+			currentScore = response.optInt("score", currentScore);
+			currentRiddle = response.optString("riddle", currentRiddle);
+			currentAnswer = response.optString("answer", currentAnswer);
+
+			outputPanel.setPoints(currentScore);
+			outputPanel.appendOutput("Riddle: " + currentRiddle);
+			displayImageFromBase64(response.optString("imageData", ""), 300, 240);
+			close();
+		} catch (Exception e) {
+			e.printStackTrace();
+			outputPanel.appendOutput("Error starting game: " + e.getMessage());
+		}
+	}
+
+	private void showAddRiddleForm() {
 		try {
 			open();
 
 			// Build request to start game
-			JSONObject req = new JSONObject().put("type", "play");
+			JSONObject request = new JSONObject().put("type", "play");
 
 			// Send request to server
-			writer.println(req.toString());
+			writer.println(request.toString());
 
 			// Read server response
-			JSONObject res = new JSONObject(reader.readLine());
-			// Display the received riddle
-			String riddle = res.getString("riddle");
-			outputPanel.appendOutput("Riddle: " + riddle);
-			outputPanel.appendOutput(res.optString("image", ""));
+			JSONObject response = new JSONObject(reader.readLine());
+			JDialog dialog = new JDialog((JDialog) null, "Add Riddle", true);
+			dialog.setLayout(new GridBagLayout());
+			dialog.setSize(360, 420);
 
-			// Insert image with riddle
-			insertImage("img/play.jpg",0,0);
-			close();
+			GridBagConstraints c = new GridBagConstraints();
+			c.fill = GridBagConstraints.HORIZONTAL;
+			c.gridx = 0;
+			c.gridy = 0;
+
+			// Handle imageData if present
+			String imageData = response.optString("imageData", null);
+			if (imageData != null) {
+				JLabel imgLabel = getScaledImageLabel(imageData, 240, 240);
+				imgLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
+				c.gridwidth = 2;
+				dialog.add(imgLabel, c);
+				c.gridy++;
+			}
+
+			dialog.add(new JLabel("Riddle:"), c);
+			c.gridy++;
+			JTextField riddleField = new JTextField();
+			dialog.add(riddleField, c);
+			c.gridy++;
+			dialog.add(new JLabel("Answer:"), c);
+			c.gridy++;
+			JTextField answerField = new JTextField();
+			dialog.add(answerField, c);
+			c.gridy++;
+
+			// Buttons Panel
+			JPanel buttonPanel = new JPanel();
+			JButton submit = new JButton("Submit");
+			JButton cancel = new JButton("Cancel");
+
+			submit.addActionListener(e -> {
+				try {
+					open();
+					JSONObject req = new JSONObject()
+						.put("type", "addRiddle")
+						.put("riddle", riddleField.getText())
+						.put("answer", answerField.getText());
+					writer.println(req.toString());
+
+					JSONObject res = new JSONObject(reader.readLine());
+					outputPanel.appendOutput("Riddle added: " + res.toString());
+					close();
+				} catch (Exception ex) {
+					ex.printStackTrace();
+				}
+				dialog.dispose();
+				showMainMenu();
+			});
+
+			cancel.addActionListener(e -> {
+				dialog.dispose();
+				showMainMenu();
+			});
+
+			buttonPanel.add(submit);
+			buttonPanel.add(cancel);
+			dialog.add(buttonPanel, c);
+
+			dialog.setLocationRelativeTo(null);
+			dialog.setVisible(true);
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
 	}
 
-	private void showAddRiddleForm() {
-		JDialog dialog = new JDialog((JDialog) null, "Add Riddle", true);
-		dialog.setLayout(new GridBagLayout());
-		dialog.setSize(300, 200);
-
-		GridBagConstraints c = new GridBagConstraints();
-		c.fill = GridBagConstraints.HORIZONTAL;
-		c.gridx = 0;
-		c.gridy = 0;
-
-		dialog.add(new JLabel("Riddle:"), c);
-		c.gridy++;
-		JTextField riddleField = new JTextField();
-		dialog.add(riddleField, c);
-		c.gridy++;
-		dialog.add(new JLabel("Answer:"), c);
-		c.gridy++;
-		JTextField answerField = new JTextField();
-		dialog.add(answerField, c);
-		c.gridy++;
-
-		// Buttons Panel
-		JPanel buttonPanel = new JPanel();
-		JButton submit = new JButton("Submit");
-		JButton cancel = new JButton("Cancel");
-
-		submit.addActionListener(e -> {
-			try {
-				open();
-				JSONObject req = new JSONObject()
-					.put("type", "addRiddle")
-					.put("riddle", riddleField.getText())
-					.put("answer", answerField.getText());
-				writer.println(req.toString());
-
-				JSONObject res = new JSONObject(reader.readLine());
-				outputPanel.appendOutput("Riddle added: " + res.toString());
-				close();
-			} catch (Exception ex) {
-				ex.printStackTrace();
-			}
-			dialog.dispose();
-			showMainMenu();
-		});
-
-		cancel.addActionListener(e -> {
-			dialog.dispose();
-			showMainMenu();
-		});
-
-		buttonPanel.add(submit);
-		buttonPanel.add(cancel);
-		dialog.add(buttonPanel, c);
-
-		dialog.setLocationRelativeTo(null);
-		dialog.setVisible(true);
-	}
-
 	private void showRiddleVoting() {
 		try {
 			open();
-			JSONObject req = new JSONObject().put("type", "getVoteRiddle");
-			writer.println(req.toString());
+			JSONObject request = new JSONObject().put("type", "getVoteRiddle");
+			writer.println(request.toString());
 
-			JSONObject res = new JSONObject(reader.readLine());
+			JSONObject response = new JSONObject(reader.readLine());
 			close();
 
-			if (res.has("riddle")) {
-				String riddleText = res.getString("riddle");
-				String answerText = res.getString("answer");
-				//String image = res.optString("image", "img/vote.png");
+			if (response.has("riddle")) {
+				String riddleText = response.getString("riddle");
+				String answerText = response.getString("answer");
 
 				// Display the riddle to vote on
 				JDialog dialog = new JDialog((JDialog) null, "Vote on Riddle", true);
 				dialog.setLayout(new GridBagLayout());
-				dialog.setSize(400, 200);
+				dialog.setSize(480, 360);
 				GridBagConstraints c = new GridBagConstraints();
 				c.gridx = 0;
 				c.gridy = 0;
 				c.gridwidth = 2;
 
-				dialog.add(new JLabel("<html><b>Riddle:</b> " + riddleText + "<br><b>Answer:</b> " + answerText + "</html>"), c);
+				// Handle imageData if present
+				String imageData = response.optString("imageData", null);
+				if (imageData != null) {
+					JLabel imgLabel = getScaledImageLabel(imageData, 240, 240);
+					imgLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
+					dialog.add(imgLabel, c);
+					c.gridy++;
+				}
+
+				JLabel votingLabel = new JLabel("<html><b>Riddle:</b> " + riddleText + "<br><b>Answer:</b> " + answerText + "</html>");
+				votingLabel.setFont(new Font("SansSerif", Font.BOLD, 18));
+				votingLabel.setBorder(BorderFactory.createEmptyBorder(10, 0, 20, 0));
+				dialog.add(votingLabel, c);
 
 				// Voting Buttons
 				JButton yesBtn = new JButton("Yes");
@@ -551,7 +656,7 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 
 				//insertImage(image, 0, 0);
 			} else {
-				outputPanel.appendOutput(res.optString("message", "No riddles to vote on."));
+				outputPanel.appendOutput(response.optString("message", "No riddles to vote on."));
 				showMainMenu();
 			}
 		} catch (Exception e) {
@@ -574,6 +679,32 @@ public class ClientGui implements Assign32starter.OutputPanel.EventHandlers {
 		} catch (Exception e) {
 			e.printStackTrace();
 		}
+	}
+
+	private void displayImageFromBase64(String base64Image, int targetWidth, int targetHeight) {
+		try {
+			byte[] imageBytes = Base64.getDecoder().decode(base64Image);
+			ByteArrayInputStream bais = new ByteArrayInputStream(imageBytes);
+			picPanel.insertImage(bais, 0, 0, targetWidth, targetHeight);  // Assuming you have a method to accept BufferedImage
+		} catch (Exception e) {
+			e.printStackTrace();
+			outputPanel.appendOutput("Failed to load image from the server: " + e.getMessage());
+		}
+	}
+
+	private JLabel getScaledImageLabel(String base64Image, int width, int height) {
+		try {
+			byte[] bytes = Base64.getDecoder().decode(base64Image);
+			ByteArrayInputStream bais = new ByteArrayInputStream(bytes);
+			BufferedImage image = ImageIO.read(bais);
+			if (image != null) {
+				Image scaled = image.getScaledInstance(width, height, Image.SCALE_SMOOTH);
+				return new JLabel(new ImageIcon(scaled));
+			}
+		} catch (Exception e) {
+			outputPanel.appendOutput("Error decoding image: " + e.getMessage());
+		}
+		return new JLabel("Image failed to load");
 	}
 
 	private void quitGame() {

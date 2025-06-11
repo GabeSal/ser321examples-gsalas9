@@ -1,7 +1,6 @@
 package Assign32starter;
 
-import java.awt.FlowLayout;
-import java.awt.GridLayout;
+import java.awt.*;
 import java.awt.image.BufferedImage;
 import java.io.BufferedInputStream;
 import java.io.ByteArrayInputStream;
@@ -157,7 +156,7 @@ public class PicturePanel extends JPanel {
   
   /**
    * Insert an image at position at (col, row)
-   * @param fname - filename of image to display
+   * @param image - filename of image to display
    * @param row - image box row
    * @param col - image box column
    * @return true if image was found and set, false otherwise
@@ -165,7 +164,12 @@ public class PicturePanel extends JPanel {
    * @throws InvalidCoordinateException - Invalid coordinate attempted
    */
   public void insertImage(ByteArrayInputStream image, int row, int col) throws IOException, InvalidCoordinateException {
-	  BufferedImage img = ImageIO.read(image);
+    BufferedImage img = ImageIO.read(image);
+
+    if (img == null) {
+      throw new IOException("ImageIO failed to decode image");
+    }
+
     // Check or invalid coordinates
     if (row < 0 || col < 0 || 
         row >= 0 && labels.length <= row || 
@@ -173,14 +177,27 @@ public class PicturePanel extends JPanel {
       throw new InvalidCoordinateException(labels.length, labels.length, row, col);
     }
     
-      // create icon to display
-      ImageIcon icon = new ImageIcon(img); 
-      // do we need to setup the dimensions of all the containers?
-      handleFirstImage(icon.getIconWidth(), icon.getIconHeight());
-      // insert image
-      labels[row][col].setIcon(icon);
-
+    // create icon to display
+    ImageIcon icon = new ImageIcon(img);
+    // do we need to setup the dimensions of all the containers?
+    handleFirstImage(icon.getIconWidth(), icon.getIconHeight());
+    // insert image
+    labels[row][col].setIcon(icon);
+    System.out.println("Decoded image, dimensions: " + img.getWidth() + "x" + img.getHeight());
   }
-  
-  
+
+  public void insertImage(ByteArrayInputStream imageStream, int row, int col, int targetWidth, int targetHeight) throws IOException, InvalidCoordinateException {
+    BufferedImage img = ImageIO.read(imageStream);
+    if (img == null) throw new IOException("Failed to decode image");
+
+    if (row < 0 || col < 0 || row >= labels.length || col >= labels[0].length) {
+      throw new InvalidCoordinateException(labels.length, labels[0].length, row, col);
+    }
+
+    Image scaled = img.getScaledInstance(targetWidth, targetHeight, Image.SCALE_SMOOTH);
+    ImageIcon icon = new ImageIcon(scaled);
+    handleFirstImage(icon.getIconWidth(), icon.getIconHeight());
+    labels[row][col].setIcon(icon);
+  }
+
 }
