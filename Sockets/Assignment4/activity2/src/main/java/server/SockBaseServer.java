@@ -5,17 +5,18 @@ import java.io.*;
 import java.util.*;
 import java.lang.*;
 
+import org.json.JSONObject;
 import proto.RequestProtos.*;
 import proto.ResponseProtos.*;
 
 class SockBaseServer {
     static String logFilename = "logs.txt";
+    static final String LEADERBOARD_FILE = "leaderboard.json";
 
     ServerSocket socket = null;
     InputStream in = null;
     OutputStream out = null;
     Socket clientSocket = null;
-    int port = 9099; // default port
     Game game;
 
 
@@ -58,35 +59,36 @@ class SockBaseServer {
                         writeToLog(name, Message.CONNECT);
                         responseBuilder.setResponseType(Response.ResponseType.WELCOME)
                                 .setHello("Hello " + name + ", welcome to the guessing game!");
+
+                        Map<String, int[]> lb = readLeaderboardFile();
+                        int[] stats = lb.getOrDefault(name, new int[] {0, 0});
+                        stats[0]++; // increment logins
+                        lb.put(name, stats);
+                        writeLeaderboardFile(lb);
                         break;
 
                     case LEADERBOARD:
                         responseBuilder.setResponseType(Response.ResponseType.LEADERBOARD);
-                        Logs logs = readLogFile().build();
-                        Map<String, Integer> wins = new HashMap<>();
-                        Map<String, Integer> logins = new HashMap<>();
+                        Map<String, int[]> lbMap = readLeaderboardFile();
 
-                        for (String line : logs.getLogList()) {
-                            String[] parts = line.split(" - ");
-                            String player = parts[0].split(": ")[1].split(" ")[0];
-                            String action = parts[1];
+                        // Convert map to list and sort by wins (descending), then logins (descending)
+                        List<Map.Entry<String, int[]>> sortedEntries = new ArrayList<>(lbMap.entrySet());
+                        sortedEntries.sort((a, b) -> {
+                            int winCompare = Integer.compare(b.getValue()[1], a.getValue()[1]); // wins descending
+                            return (winCompare != 0) ? winCompare : Integer.compare(b.getValue()[0], a.getValue()[0]); // logins descending
+                        });
 
-                            if (action.equals("CONNECT")) {
-                                logins.put(player, logins.getOrDefault(player, 0) + 1);
-                            } else if (action.equals("WIN")) {
-                                wins.put(player, wins.getOrDefault(player, 0) + 1);
-                            }
-                        }
-
-                        for (String player : logins.keySet()) {
+                        // Cap to top 25
+                        int count = 0;
+                        for (Map.Entry<String, int[]> entry : sortedEntries) {
+                            if (count++ >= 25) break;
                             Leader l = Leader.newBuilder()
-                                    .setName(player)
-                                    .setLogins(logins.get(player))
-                                    .setWins(wins.getOrDefault(player, 0))
+                                    .setName(entry.getKey())
+                                    .setLogins(entry.getValue()[0])
+                                    .setWins(entry.getValue()[1])
                                     .build();
                             responseBuilder.addLeaderboard(l);
                         }
-
                         break;
 
                     case START:
@@ -126,6 +128,12 @@ class SockBaseServer {
                             responseBuilder.setResponseType(Response.ResponseType.WON)
                                     .setPhrase(newPhrase)
                                     .setMessage("Congratulations! You won with " + game.getPoints() + " points!");
+                            lb = readLeaderboardFile();
+                            stats = lb.getOrDefault(name, new int[] {0, 0});
+                            stats[1]++; // increment wins
+                            lb.put(name, stats);
+                            writeLeaderboardFile(lb);
+
                             inGame = false;
                         } else if (game.getPoints() <= 0) {
                             responseBuilder.setResponseType(Response.ResponseType.LOST)
@@ -175,6 +183,41 @@ class SockBaseServer {
         builder.setResponseType(Response.ResponseType.ERROR)
                 .setErrorCode(code)
                 .setMessage(msg);
+    }
+
+    private synchronized static Map<String, int[]> readLeaderboardFile() {
+        Map<String, int[]> leaderboard = new HashMap<>();
+        File file = new File(LEADERBOARD_FILE);
+        if (!file.exists()) return leaderboard;
+
+        try (BufferedReader reader = new BufferedReader(new FileReader(file))) {
+            String json = reader.lines().reduce("", (a, b) -> a + b);
+            JSONObject obj = new JSONObject(json);
+            for (String name : obj.keySet()) {
+                JSONObject entry = obj.getJSONObject(name);
+                int logins = entry.getInt("logins");
+                int wins = entry.getInt("wins");
+                leaderboard.put(name, new int[] { logins, wins });
+            }
+        } catch (Exception e) {
+            System.out.println("Failed to read leaderboard: " + e.getMessage());
+        }
+        return leaderboard;
+    }
+
+    private synchronized static void writeLeaderboardFile(Map<String, int[]> leaderboard) {
+        try (BufferedWriter writer = new BufferedWriter(new FileWriter(LEADERBOARD_FILE))) {
+            JSONObject obj = new JSONObject();
+            for (Map.Entry<String, int[]> entry : leaderboard.entrySet()) {
+                JSONObject playerObj = new JSONObject();
+                playerObj.put("logins", entry.getValue()[0]);
+                playerObj.put("wins", entry.getValue()[1]);
+                obj.put(entry.getKey(), playerObj);
+            }
+            writer.write(obj.toString(2)); // pretty print
+        } catch (Exception e) {
+            System.out.println("Failed to write leaderboard: " + e.getMessage());
+        }
     }
 
     /**
@@ -257,8 +300,8 @@ class SockBaseServer {
     }
 
     public static void main (String args[]) throws Exception {
-        if (args.length != 2) {
-            System.out.println("Expected arguments: <port(int)> <delay(int)>");
+        if (args.length != 1) {
+            System.out.println("Expected arguments: <port(int)>");
             System.exit(1);
         }
         int port = 9099; // default port
