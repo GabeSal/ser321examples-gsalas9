@@ -1,0 +1,62 @@
+apply plugin: 'application'
+
+repositories {
+    mavenCentral()
+}
+
+dependencies {
+   implementation group: 'org.json', name: 'json', version: '20200518'
+}
+
+//define main class
+mainClassName = 'Concentration'
+
+tasks.register('runServer', JavaExec) {
+  group 'server'
+  description 'Creates Server socket waits for messages'
+
+  classpath = sourceSets.main.runtimeClasspath
+
+  mainClass = 'taskone.Server'
+  standardInput = System.in
+
+  // run with arguments e.g.: gradle runServer -Pport=9099 -q --console=plain
+  if (project.hasProperty('port')) {
+    args(project.getProperty('port'));
+  }
+}
+
+tasks.register('runThreadedServer', JavaExec) {
+  mainClass = 'taskone.ThreadedServer'
+  classpath = sourceSets.main.runtimeClasspath
+
+  if (project.hasProperty('port')) {
+    args(project.getProperty('port'));
+  }
+}
+
+tasks.register('runThreadPoolServer', JavaExec) {
+  mainClass = 'taskone.ThreadPoolServer'
+  classpath = sourceSets.main.runtimeClasspath
+
+  if (project.hasProperty('port') && project.hasProperty('maxClients')) {
+    args(project.getProperty('port'), project.getProperty('maxClients'));
+  }
+}
+
+tasks.register('runClient', JavaExec) {
+  group 'client'
+  description 'Creates client socket sends a message to the server'
+
+  classpath = sourceSets.main.runtimeClasspath
+  standardInput = System.in
+
+  mainClass = 'taskone.Client'
+  standardInput = System.in
+
+  // run with arguments e.g.: gradle runClient -Phost=localhost -Pport=9099 -q --console=plain
+  if (project.hasProperty("host") && project.hasProperty('port')) {
+    args(project.getProperty('host'), project.getProperty('port'));
+  }
+}
+

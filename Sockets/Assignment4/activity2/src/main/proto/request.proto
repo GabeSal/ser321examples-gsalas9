@@ -1,0 +1,30 @@
+syntax = "proto2";
+
+package operation;
+
+option java_package = "proto";
+option java_outer_classname = "RequestProtos";
+
+message Request {
+  enum OperationType {
+    NAME = 0;
+    LEADERBOARD = 1;
+    START = 2;
+    GUESS = 3;
+    QUIT = 4;
+  }
+
+  optional OperationType operationType = 1 [default = NAME];
+  optional string name = 2;
+  optional string guess = 3;
+}
+
+enum Message {
+  CONNECT = 0;
+  START = 1;
+  WIN = 2;
+}
+
+message Logs {
+  repeated string log = 1;
+}

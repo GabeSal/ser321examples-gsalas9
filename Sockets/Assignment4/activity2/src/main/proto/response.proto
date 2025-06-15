@@ -1,0 +1,36 @@
+syntax = "proto2";
+
+package operation;
+
+option java_package = "proto";
+option java_outer_classname = "ResponseProtos";
+
+message Response {
+  enum ResponseType {
+    WELCOME = 0;
+    LEADERBOARD = 1;
+    TASK = 2;
+    WON = 3;
+    ERROR = 4;
+    BYE = 5;
+    LOST = 6;
+  }
+
+  optional ResponseType responseType = 1 [default = WELCOME];
+  optional string hello = 2;
+
+  repeated Leader leaderboard = 3;
+
+  optional string task = 4;
+  optional string phrase = 5;
+
+  optional bool eval = 6;
+  optional string message = 7;
+  optional int32 errorCode = 8;
+}
+
+message Leader {
+	optional string name = 1;
+	optional int32 wins = 2;
+	optional int32 logins = 3;
+}
