@@ -70,16 +70,16 @@ Winning entries are logged with the highest score per name.
 - Shared across all connected clients.
 
 ## How to Run
-Make sure you've already generated the Protobuf Java files (this is automatic via Gradle).
+Ensure ``protobuf`` files are present in the ``build/generated/source/proto/main/java/proto`` directory. "Host" and "port" parameters must be defined.
+If connecting to AWS, then ```-Phost="18.116.49.126"``` for the client, and the port should be ```-Pport=8500```.
+If connecting locally, then ```-Phost=localhost``` and ```-Pport=[your port # here]``` should work fine.
 
 ### To start the server:
 ```
-gradle runServer -Pport=9000
+gradle runServer -Pport=8500
 ```
 
 ### To start the client:
 ```
-gradle runClient -Phost=localhost -Pport=9000
+gradle runClient -Phost=localhost -Pport=8500
 ```
-
-No parameters are required — defaults to port 9099 and localhost.
