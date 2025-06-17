@@ -63,6 +63,7 @@ class SockBaseClient {
                 String choice = stdin.readLine();
 
                 switch (choice) {
+                    // Leaderboard
                     case "1":
                         Request leaderboardReq = Request.newBuilder()
                                 .setOperationType(Request.OperationType.LEADERBOARD)
@@ -72,12 +73,16 @@ class SockBaseClient {
                         if (leaderboardRes.getResponseType() == Response.ResponseType.LEADERBOARD) {
                             System.out.println("\n--- Leaderboard ---");
                             for (Leader l : leaderboardRes.getLeaderboardList()) {
-                                System.out.println(l.getName() + " - Wins: " + l.getWins() + ", Logins: " + l.getLogins());
+                                System.out.println(
+                                    l.getName() + " - Wins: " + l.getWins() +
+                                    ", Logins: " + l.getLogins() +
+                                    ", Points: " + l.getPoints()
+                                );
                             }
                             System.out.println("-------------------\n");
                         }
                         break;
-
+                    // Game start
                     case "2":
                         Request startGame = Request.newBuilder()
                                 .setOperationType(Request.OperationType.START)
@@ -140,7 +145,7 @@ class SockBaseClient {
                             }
                         }
                         break;
-
+                    // Quit app
                     case "3":
                         Request quitReq = Request.newBuilder()
                                 .setOperationType(Request.OperationType.QUIT)

@@ -33,4 +33,5 @@ message Leader {
 	optional string name = 1;
 	optional int32 wins = 2;
 	optional int32 logins = 3;
+  optional int32 points = 4;
 }

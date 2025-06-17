@@ -17,6 +17,7 @@ message Request {
   optional OperationType operationType = 1 [default = NAME];
   optional string name = 2;
   optional string guess = 3;
+
 }
 
 enum Message {

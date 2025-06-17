@@ -10,7 +10,6 @@ import proto.RequestProtos.*;
 import proto.ResponseProtos.*;
 
 class SockBaseServer {
-    static String logFilename = "logs.txt";
     static final String LEADERBOARD_FILE = "leaderboard.json";
 
     ServerSocket socket = null;
@@ -56,12 +55,12 @@ class SockBaseServer {
                 switch (request.getOperationType()) {
                     case NAME:
                         name = request.getName();
-                        writeToLog(name, Message.CONNECT);
                         responseBuilder.setResponseType(Response.ResponseType.WELCOME)
                                 .setHello("Hello " + name + ", welcome to the guessing game!");
 
                         Map<String, int[]> lb = readLeaderboardFile();
-                        int[] stats = lb.getOrDefault(name, new int[] {0, 0});
+                        // stats order: {logins, wins, score}
+                        int[] stats = lb.getOrDefault(name, new int[] {0, 0, 10});
                         stats[0]++; // increment logins
                         lb.put(name, stats);
                         writeLeaderboardFile(lb);
@@ -86,6 +85,7 @@ class SockBaseServer {
                                     .setName(entry.getKey())
                                     .setLogins(entry.getValue()[0])
                                     .setWins(entry.getValue()[1])
+                                    .setPoints(entry.getValue()[2])
                                     .build();
                             responseBuilder.addLeaderboard(l);
                         }
@@ -124,13 +124,14 @@ class SockBaseServer {
                         if (!correct) wrongGuesses++;
 
                         if (!newPhrase.contains("_")) {
-                            writeScoreToLog(name, game.getPoints());
                             responseBuilder.setResponseType(Response.ResponseType.WON)
                                     .setPhrase(newPhrase)
                                     .setMessage("Congratulations! You won with " + game.getPoints() + " points!");
+
                             lb = readLeaderboardFile();
-                            stats = lb.getOrDefault(name, new int[] {0, 0});
+                            stats = lb.getOrDefault(name, new int[] {0, 0, 10});
                             stats[1]++; // increment wins
+                            stats[2] += game.getPoints(); // increment score
                             lb.put(name, stats);
                             writeLeaderboardFile(lb);
 
@@ -197,7 +198,8 @@ class SockBaseServer {
                 JSONObject entry = obj.getJSONObject(name);
                 int logins = entry.getInt("logins");
                 int wins = entry.getInt("wins");
-                leaderboard.put(name, new int[] { logins, wins });
+                int score = entry.getInt("score");
+                leaderboard.put(name, new int[] { logins, wins, score });
             }
         } catch (Exception e) {
             System.out.println("Failed to read leaderboard: " + e.getMessage());
@@ -212,90 +214,12 @@ class SockBaseServer {
                 JSONObject playerObj = new JSONObject();
                 playerObj.put("logins", entry.getValue()[0]);
                 playerObj.put("wins", entry.getValue()[1]);
+                playerObj.put("score", entry.getValue()[2]);
                 obj.put(entry.getKey(), playerObj);
             }
             writer.write(obj.toString(2)); // pretty print
         } catch (Exception e) {
             System.out.println("Failed to write leaderboard: " + e.getMessage());
-        }
-    }
-
-    /**
-     * Writing a new entry to our log
-     * @param name - Name of the person logging in
-     * @param message - type Message from Protobuf which is the message to be written in the log (e.g. Connect) 
-     * @return String of the new hidden image
-     */
-    public static synchronized void writeToLog(String name, Message message) {
-        try {
-            // read old log file
-            Logs.Builder logs = readLogFile();
-
-            // get current time and data
-            Date date = java.util.Calendar.getInstance().getTime();
-
-            // we are writing a new log entry to our log
-            // add a new log entry to the log list of the Protobuf object
-            logs.addLog(date.toString() + ": " + name + " - " + message);
-
-            // open log file
-            FileOutputStream output = new FileOutputStream(logFilename);
-            Logs logsObj = logs.build();
-
-            // This is only to show how you can iterate through a Logs object which is a protobuf object
-            // which has a repeated field "log"
-            for (String log : logsObj.getLogList()) {
-                System.out.println(log);
-            }
-
-            // write to log file
-            logsObj.writeTo(output);
-        } catch (Exception e) {
-            System.out.println("Issue while trying to save");
-        }
-    }
-
-    public static synchronized void writeScoreToLog(String name, int score) {
-        try {
-            Logs.Builder logs = readLogFile();
-            List<String> updatedLogs = new ArrayList<>();
-
-            // Remove lower scores for this player
-            for (String entry : logs.getLogList()) {
-                if (entry.contains(" - WIN")) {
-                    String[] split = entry.split(" - ");
-                    String entryName = split[0].split(": ")[1].split(" ")[0];
-                    int oldScore = Integer.parseInt(split[1].split(" ")[2]);
-
-                    if (entryName.equals(name) && oldScore >= score) {
-                        return; // Don't update
-                    }
-                }
-            }
-
-            Date date = Calendar.getInstance().getTime();
-            logs.addLog(date.toString() + ": " + name + " - WIN " + score);
-
-            FileOutputStream output = new FileOutputStream(logFilename);
-            logs.build().writeTo(output);
-        } catch (Exception e) {
-            System.out.println("Issue writing score to log");
-        }
-    }
-
-    /**
-     * Reading the current log file
-     * @return Logs.Builder a builder of a logs entry from protobuf
-     */
-    public static Logs.Builder readLogFile() throws Exception{
-        Logs.Builder logs = Logs.newBuilder();
-
-        try {
-            // just read the file and put what is in it into the logs object
-            return logs.mergeFrom(new FileInputStream(logFilename));
-        } catch (FileNotFoundException e) {
-            System.out.println(logFilename + ": File not found.  Creating a new file.");
-            return logs;
         }
     }
 
