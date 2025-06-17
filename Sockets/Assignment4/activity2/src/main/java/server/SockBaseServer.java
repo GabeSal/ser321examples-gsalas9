@@ -4,12 +4,15 @@ import java.net.*;
 import java.io.*;
 import java.util.*;
 import java.lang.*;
+import java.util.concurrent.ExecutorService;
+import java.util.concurrent.Executors;
 
 import org.json.JSONObject;
 import proto.RequestProtos.*;
 import proto.ResponseProtos.*;
 
 class SockBaseServer {
+    static final int MAX_PLAYERS = 16;
     static final String LEADERBOARD_FILE = "leaderboard.json";
 
     ServerSocket socket = null;
@@ -38,9 +41,6 @@ class SockBaseServer {
     public void handleRequests() {
         System.out.println("Ready...");
         String name = "";
-        int correctGuesses = 0;
-        int maxWrongGuesses = 6;
-        int wrongGuesses = 0;
 
         boolean quit = false;
         boolean inGame = false;
@@ -74,7 +74,7 @@ class SockBaseServer {
                         List<Map.Entry<String, int[]>> sortedEntries = new ArrayList<>(lbMap.entrySet());
                         sortedEntries.sort((a, b) -> {
                             int winCompare = Integer.compare(b.getValue()[1], a.getValue()[1]); // wins descending
-                            return (winCompare != 0) ? winCompare : Integer.compare(b.getValue()[0], a.getValue()[0]); // logins descending
+                            return (winCompare != 0) ? winCompare : Integer.compare(b.getValue()[2], a.getValue()[2]); // points descending
                         });
 
                         // Cap to top 25
@@ -93,8 +93,6 @@ class SockBaseServer {
 
                     case START:
                         inGame = true;
-                        correctGuesses = 0;
-                        wrongGuesses = 0;
 
                         responseBuilder.setResponseType(Response.ResponseType.TASK)
                                 .setPhrase(game.getPhrase())
@@ -121,7 +119,6 @@ class SockBaseServer {
                         taskMsg += "Score: " + game.getPoints() + "\n";
                         taskMsg += "Correct guesses: " + game.getCorrectGuesses() + "\n";
                         taskMsg += "Incorrect guesses: " + game.getIncorrectGuesses();
-                        if (!correct) wrongGuesses++;
 
                         if (!newPhrase.contains("_")) {
                             responseBuilder.setResponseType(Response.ResponseType.WON)
@@ -245,12 +242,17 @@ class SockBaseServer {
             System.exit(2);
         }
 
+        ExecutorService executor = Executors.newFixedThreadPool(MAX_PLAYERS);
         while (true) {
             try{
                 System.out.println("Accepting a Client...");
                 clientSocket = socket.accept();
-                SockBaseServer server = new SockBaseServer(clientSocket, new Game());
-                server.handleRequests();
+
+                Socket socketToServe = clientSocket;
+                executor.submit(() -> {
+                    SockBaseServer server = new SockBaseServer(socketToServe, new Game());
+                    server.handleRequests();
+                });
             }
             catch(Exception e){
                 System.out.println("Server encountered an error while connecting to a client.");

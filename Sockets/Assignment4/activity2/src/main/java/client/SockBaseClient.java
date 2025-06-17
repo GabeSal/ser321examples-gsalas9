@@ -13,7 +13,6 @@ class SockBaseClient {
         Socket serverSock = null;
         OutputStream out = null;
         InputStream in = null;
-        int i1=0, i2=0;
         int port = 9099; // default port
         String clientName = "";
 
