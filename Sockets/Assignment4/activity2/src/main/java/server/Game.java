@@ -81,11 +81,11 @@ public class Game {
             for (int i = 0; i < length; i++) {
                 char curr = phrase.charAt(i);
                 originalPhrase[i] = curr;
-                if (curr == ' ') {
-                    hiddenPhrase[i] = curr;
+                if (!Character.isLetter(curr)) {
+                    hiddenPhrase[i] = curr; // show punctuation and symbols
                 } else {
                     hiddenPhrase[i] = '_';
-                } 
+                }
             }
         }
         catch (Exception e){

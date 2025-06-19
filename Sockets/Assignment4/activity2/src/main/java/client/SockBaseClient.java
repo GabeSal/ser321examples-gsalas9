@@ -56,7 +56,7 @@ class SockBaseClient {
                     clientName = inputName;
                     break;
                 } else {
-                    System.out.println("❌ Invalid name. Names must:");
+                    System.out.println("Invalid name. Names must:");
                     System.out.println("- Start with a letter (A-Z or a-z)");
                     System.out.println("- Be at least 4 characters long");
                     System.out.println("- Only contain letters and numbers (no special characters)");
@@ -146,14 +146,22 @@ class SockBaseClient {
                                 System.out.print("Enter your guess (or 'exit' to quit): ");
                                 String guess = stdin.readLine();
 
+                                // Returns to main menu when "exit" is entered
                                 if (guess.equalsIgnoreCase("exit")) {
                                     Request quitReq = Request.newBuilder()
-                                            .setOperationType(Request.OperationType.QUIT)
+                                            .setOperationType(Request.OperationType.MAIN_MENU)
                                             .build();
                                     quitReq.writeDelimitedTo(out);
-                                    Response quitRes = Response.parseDelimitedFrom(in);
-                                    System.out.println(quitRes.getMessage());
-                                    System.exit(0);
+                                    Response menuRes = Response.parseDelimitedFrom(in);
+
+                                    if (menuRes.getResponseType() == Response.ResponseType.TASK) {
+                                        System.out.println("Returned to main menu.");
+                                    } else {
+                                        System.out.println("Unexpected response when returning to menu.");
+                                    }
+
+                                    playing = false;
+                                    continue;
                                 }
 
                                 Request guessReq = Request.newBuilder()

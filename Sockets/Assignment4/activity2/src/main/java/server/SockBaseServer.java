@@ -92,6 +92,8 @@ class SockBaseServer {
                         break;
 
                     case START:
+                        game = new Game();
+                        game.newGame();
                         inGame = true;
 
                         responseBuilder.setResponseType(Response.ResponseType.TASK)
@@ -119,12 +121,18 @@ class SockBaseServer {
                         taskMsg += "Score: " + game.getPoints() + "\n";
                         taskMsg += "Correct guesses: " + game.getCorrectGuesses() + "\n";
                         taskMsg += "Incorrect guesses: " + game.getIncorrectGuesses() + "\n";
-                        taskMsg += "Attempts left: " + game.getFailures() + "/" + game.getMaxFailures();
+                        taskMsg += "Player lives: " + game.getFailures() + "/" + game.getMaxFailures();
 
-                        if (!newPhrase.contains("_")) {
+                        if (game.getPoints() <= 0 || game.hasExceededFailures()) {
+                            responseBuilder.setResponseType(Response.ResponseType.LOST)
+                                    .setPhrase(newPhrase)
+                                    .setMessage("You lost.\nScore for session: " + game.getPoints());
+                            inGame = false;
+                        } else if (!newPhrase.contains("_")) {
                             responseBuilder.setResponseType(Response.ResponseType.WON)
                                     .setPhrase(newPhrase)
-                                    .setMessage("Congratulations! You won with " + game.getPoints() + " points!");
+                                    .setMessage("Congratulations, " + name +
+                                                "! You won with " + game.getPoints() + " points!");
 
                             lb = readLeaderboardFile();
                             stats = lb.getOrDefault(name, new int[] {0, 0, 10});
@@ -134,18 +142,18 @@ class SockBaseServer {
                             writeLeaderboardFile(lb);
 
                             inGame = false;
-                        } else if (game.getPoints() <= 0 || game.hasExceededFailures()) {
-                            responseBuilder.setResponseType(Response.ResponseType.LOST)
-                                    .setPhrase(newPhrase)
-                                    .setMessage("You lost. Failures: " + game.getFailures() + "/" +
-                                                game.getMaxFailures() + ", Score: " + game.getPoints());
-                            inGame = false;
                         } else {
                             responseBuilder.setResponseType(Response.ResponseType.TASK)
                                     .setPhrase(newPhrase)
                                     .setTask(taskMsg)
                                     .setEval(correct);
                         }
+                        break;
+
+                    case MAIN_MENU:
+                        inGame = false;  // Return to menu context
+                        responseBuilder.setResponseType(Response.ResponseType.TASK)
+                                .setTask("Returned to main menu.");
                         break;
 
                     case QUIT:

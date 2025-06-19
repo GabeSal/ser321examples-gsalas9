@@ -12,6 +12,7 @@ message Request {
     START = 2;
     GUESS = 3;
     QUIT = 4;
+    MAIN_MENU = 5;
   }
 
   optional OperationType operationType = 1 [default = NAME];
