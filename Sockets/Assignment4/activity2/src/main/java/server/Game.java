@@ -14,6 +14,7 @@ import java.io.*;
  */
 
 public class Game {
+    private static final int DEFAULT_GUESS_FAILURES = 6;
     private int points;
     private int length; // length of phrase
     private char[] originalPhrase; // the original phrase
@@ -23,6 +24,7 @@ public class Game {
     private Set<Character> guessedCorrect = new HashSet<>();
     private Set<Character> guessedWrong = new HashSet<>();
     private String currentTask;
+    private int failedGuesses;
 
 
     public Game(){
@@ -40,6 +42,7 @@ public class Game {
         guessedCorrect.clear();
         guessedWrong.clear();
         guessedAll.clear();
+        failedGuesses = 0;
         getRandomPhrase();
     }
 
@@ -116,12 +119,19 @@ public class Game {
         } else {
             guessedWrong.add(guess);
             points--; // Wrong guess penalty
+            failedGuesses++; // Increment failures
         }
 
         return found;
     }
 
     public int getPoints() { return points; }
+
+    public int getFailures() { return failedGuesses; }
+
+    public int getMaxFailures() { return DEFAULT_GUESS_FAILURES; }
+
+    public boolean hasExceededFailures() { return failedGuesses >= DEFAULT_GUESS_FAILURES; }
 
     public String getPhrase(){
         return String.valueOf(hiddenPhrase);

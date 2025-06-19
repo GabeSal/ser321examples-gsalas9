@@ -9,6 +9,12 @@ import proto.ResponseProtos.*;
 
 class SockBaseClient {
 
+    private static String centerText(String text, int width) {
+        int padding = (width - text.length()) / 2;
+        String pad = " ".repeat(Math.max(0, padding));
+        return pad + text + pad + (text.length() % 2 != 0 ? " " : "");
+    }
+
     public static void main (String args[]) throws Exception {
         Socket serverSock = null;
         OutputStream out = null;
@@ -70,15 +76,41 @@ class SockBaseClient {
                         leaderboardReq.writeDelimitedTo(out);
                         Response leaderboardRes = Response.parseDelimitedFrom(in);
                         if (leaderboardRes.getResponseType() == Response.ResponseType.LEADERBOARD) {
-                            System.out.println("\n--- Leaderboard ---");
-                            for (Leader l : leaderboardRes.getLeaderboardList()) {
-                                System.out.println(
-                                    l.getName() + " - Wins: " + l.getWins() +
-                                    ", Logins: " + l.getLogins() +
-                                    ", Points: " + l.getPoints()
-                                );
+                            List<Leader> leaders = leaderboardRes.getLeaderboardList();
+                            int rank = 1;
+
+                            // Determine dynamic max lengths for all columns
+                            int maxRankLen = String.valueOf(leaders.size()).length();
+                            int maxNameLen = "Name".length();
+                            int maxLoginLen = "Logins".length();
+                            int maxWinsLen = "Wins".length();
+                            int maxScoreLen = "Score".length();
+                            for (Leader l : leaders) {
+                                maxNameLen = Math.max(maxNameLen, l.getName().length());
+                                maxLoginLen = Math.max(maxLoginLen, String.valueOf(l.getLogins()).length());
+                                maxWinsLen = Math.max(maxWinsLen, String.valueOf(l.getWins()).length());
+                                maxScoreLen = Math.max(maxScoreLen, String.valueOf(l.getPoints()).length());
                             }
-                            System.out.println("-------------------\n");
+
+                            // Build horizontal line dynamically
+                            int tableWidth = 6 + maxRankLen + maxNameLen + maxLoginLen + maxWinsLen + maxScoreLen + 20;
+                            String horizontalLine = "=".repeat(tableWidth);
+
+                            System.out.println("\n" + horizontalLine);
+                            System.out.println(centerText("LEADERBOARD", tableWidth));
+                            System.out.println(horizontalLine);
+
+                            // Table header
+                            System.out.printf("| %" + maxRankLen + "s | %-" + maxNameLen + "s | %" + maxLoginLen + "s | %" + maxWinsLen + "s | %" + maxScoreLen + "s |\n",
+                                    "#", "Name", "Logins", "Wins", "Score");
+                            System.out.println("-".repeat(tableWidth));
+
+                            for (Leader l : leaders) {
+                                System.out.printf("| %" + maxRankLen + "d | %-" + maxNameLen + "s | %" + maxLoginLen + "d | %" + maxWinsLen + "d | %" + maxScoreLen + "d |\n",
+                                        rank++, l.getName(), l.getLogins(), l.getWins(), l.getPoints());
+                            }
+
+                            System.out.println(horizontalLine + "\n");
                         }
                         break;
                     // Game start

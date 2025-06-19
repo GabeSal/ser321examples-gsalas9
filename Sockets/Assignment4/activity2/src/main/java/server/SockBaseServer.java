@@ -118,7 +118,8 @@ class SockBaseServer {
                         String taskMsg = "Guess another letter.\n";
                         taskMsg += "Score: " + game.getPoints() + "\n";
                         taskMsg += "Correct guesses: " + game.getCorrectGuesses() + "\n";
-                        taskMsg += "Incorrect guesses: " + game.getIncorrectGuesses();
+                        taskMsg += "Incorrect guesses: " + game.getIncorrectGuesses() + "\n";
+                        taskMsg += "Attempts left: " + game.getFailures() + "/" + game.getMaxFailures();
 
                         if (!newPhrase.contains("_")) {
                             responseBuilder.setResponseType(Response.ResponseType.WON)
@@ -133,10 +134,11 @@ class SockBaseServer {
                             writeLeaderboardFile(lb);
 
                             inGame = false;
-                        } else if (game.getPoints() <= 0) {
+                        } else if (game.getPoints() <= 0 || game.hasExceededFailures()) {
                             responseBuilder.setResponseType(Response.ResponseType.LOST)
                                     .setPhrase(newPhrase)
-                                    .setMessage("You lost and got 0 points.");
+                                    .setMessage("You lost. Failures: " + game.getFailures() + "/" +
+                                                game.getMaxFailures() + ", Score: " + game.getPoints());
                             inGame = false;
                         } else {
                             responseBuilder.setResponseType(Response.ResponseType.TASK)

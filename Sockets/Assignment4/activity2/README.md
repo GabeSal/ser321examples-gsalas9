@@ -71,7 +71,7 @@ Winning entries are logged with the highest score per name.
 
 ## How to Run
 Ensure ``protobuf`` files are present in the ``build/generated/source/proto/main/java/proto`` directory. "Host" and "port" parameters must be defined.
-If connecting to AWS, then ```-Phost="52.14.11.155"``` for the client, and the port should be ```-Pport=8500```.
+If connecting to AWS, then ```-Phost="13.58.71.62"``` for the client, and the port should be ```-Pport=8500```.
 If connecting locally, then ```-Phost=localhost``` and ```-Pport=[your port # here]``` should work fine.
 
 ### To start the server:
