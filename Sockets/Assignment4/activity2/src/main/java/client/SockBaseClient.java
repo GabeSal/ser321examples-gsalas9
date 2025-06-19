@@ -46,8 +46,23 @@ class SockBaseClient {
 
             // ==== NAME / LOGIN PHASE ====
             System.out.println("Please provide your name for the server. :-)");
-            String strToSend = stdin.readLine();
-            clientName = strToSend;
+            
+            // Name input + validation loop
+            while (true) {
+                String inputName = stdin.readLine().trim();
+
+                // Name must match regex: starts with letter, 4+ characters, no special chars
+                if (inputName.matches("^[A-Za-z][A-Za-z0-9]{3,}$")) {
+                    clientName = inputName;
+                    break;
+                } else {
+                    System.out.println("❌ Invalid name. Names must:");
+                    System.out.println("- Start with a letter (A-Z or a-z)");
+                    System.out.println("- Be at least 4 characters long");
+                    System.out.println("- Only contain letters and numbers (no special characters)");
+                    System.out.print("Try again: ");
+                }
+            }
 
             Request login = Request.newBuilder()
                     .setOperationType(Request.OperationType.NAME)
