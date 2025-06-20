@@ -37,7 +37,7 @@ public class Game {
      * Method loads in a new phrase from the specified file and creates the hidden phrase for it.
      * @return Nothing.
      */
-    public  void newGame(){
+    public void newGame(){
         currentTask = "Guess a letter";
         guessedCorrect.clear();
         guessedWrong.clear();

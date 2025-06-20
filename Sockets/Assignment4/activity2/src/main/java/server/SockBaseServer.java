@@ -25,7 +25,6 @@ class SockBaseServer {
     public SockBaseServer(Socket sock, Game game){
         this.clientSocket = sock;
         this.game = game;
-        this.game.newGame(); // NEW: start new game per client
 
         try {
             in = clientSocket.getInputStream();
@@ -92,7 +91,6 @@ class SockBaseServer {
                         break;
 
                     case START:
-                        game = new Game();
                         game.newGame();
                         inGame = true;
 
@@ -121,7 +119,8 @@ class SockBaseServer {
                         taskMsg += "Score: " + game.getPoints() + "\n";
                         taskMsg += "Correct guesses: " + game.getCorrectGuesses() + "\n";
                         taskMsg += "Incorrect guesses: " + game.getIncorrectGuesses() + "\n";
-                        taskMsg += "Player lives: " + game.getFailures() + "/" + game.getMaxFailures();
+                        taskMsg += "Player lives: " + (game.getMaxFailures() - game.getFailures()) +
+                                   "/" + game.getMaxFailures();
 
                         if (game.getPoints() <= 0 || game.hasExceededFailures()) {
                             responseBuilder.setResponseType(Response.ResponseType.LOST)
