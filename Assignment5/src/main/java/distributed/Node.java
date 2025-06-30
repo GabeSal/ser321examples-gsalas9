@@ -1,13 +1,14 @@
 package distributed;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
+import distributed.protocol.SubtaskRequest;
+import distributed.protocol.SubtaskResult;
 
-import java.io.*;
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.util.List;
 
 public class Node {
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -19,28 +20,39 @@ public class Node {
         int port = Integer.parseInt(args[1]);
         boolean simulateFault = args.length >= 3 && args[2].equals("1");
 
-        try (Socket socket = new Socket(host, port);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true)) {
+        try (Socket socket = new Socket(host, port)) {
+            InputStream in = socket.getInputStream();
+            OutputStream out = socket.getOutputStream();
 
-            System.out.println("[NODE] Connected to Leader at " + host + ":" + port);
+            System.out.printf("[NODE] Connected to Leader at %s:%d%n", host, port);
 
-            String json = in.readLine(); // blocking wait for task
-            SubtaskRequest task = mapper.readValue(json, SubtaskRequest.class);
+            // Receive subtask via Protobuf
+            SubtaskRequest request = SubtaskRequest.parseDelimitedFrom(in);
+
+            if (request == null) {
+                System.err.println("[NODE] Received empty task.");
+                return;
+            }
+
+            List<Integer> nums = request.getListList();
+            int delay = request.getDelayMs();
 
             System.out.printf("[NODE] Received task: %s | Delay: %dms | Faulty: %s%n",
-                    task.list, task.delayMs, simulateFault);
+                    nums, delay, simulateFault);
 
             int result = simulateFault
-                    ? computeFaulty(task.list, task.delayMs)
-                    : computeWithDelay(task.list, task.delayMs);
+                    ? computeFaulty(nums, delay)
+                    : computeWithDelay(nums, delay);
 
-            SubtaskResult response = new SubtaskResult(result);
-            out.println(mapper.writeValueAsString(response));
+            // Build and send response
+            SubtaskResult response = SubtaskResult.newBuilder()
+                    .setSum(result)
+                    .build();
+            response.writeDelimitedTo(out);
 
             System.out.printf("[NODE] Computation done. Sent result: %d%n", result);
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.err.println("[NODE] Connection error: " + e.getMessage());
         }
     }
@@ -65,21 +77,5 @@ public class Node {
             } catch (InterruptedException ignored) {}
         }
         return product;
-    }
-
-    // Temporary inner models
-    static class SubtaskRequest {
-        public List<Integer> list;
-        public int delayMs;
-    }
-
-    static class SubtaskResult {
-        public String type = "PARTIAL_RESULT";
-        public int sum;
-
-        public SubtaskResult() {}
-        public SubtaskResult(int sum) {
-            this.sum = sum;
-        }
     }
 }

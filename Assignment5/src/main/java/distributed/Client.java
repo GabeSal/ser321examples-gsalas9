@@ -1,16 +1,18 @@
 package distributed;
 
-import java.io.*;
+import distributed.protocol.TaskRequest;
+import distributed.protocol.ResultResponse;
+import distributed.protocol.ErrorResponse;
+
+import java.io.InputStream;
+import java.io.OutputStream;
 import java.net.Socket;
 import java.util.Arrays;
 import java.util.List;
 import java.util.Scanner;
 import java.util.stream.Collectors;
 
-import com.fasterxml.jackson.databind.ObjectMapper;
-
 public class Client {
-    private static final ObjectMapper mapper = new ObjectMapper();
 
     public static void main(String[] args) {
         if (args.length < 2) {
@@ -31,22 +33,37 @@ public class Client {
         System.out.print("[CLIENT] Enter delay in milliseconds: ");
         int delayMs = Integer.parseInt(scanner.nextLine());
 
-        try (Socket socket = new Socket(host, port);
-             PrintWriter out = new PrintWriter(socket.getOutputStream(), true);
-             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream()))) {
+        try (Socket socket = new Socket(host, port)) {
+            OutputStream out = socket.getOutputStream();
+            InputStream in = socket.getInputStream();
 
-            // Create request
-            TaskRequest request = new TaskRequest(numbers, delayMs);
-            String json = mapper.writeValueAsString(request);
-            out.println(json);
+            // Build and send TaskRequest
+            TaskRequest request = TaskRequest.newBuilder()
+                    .addAllList(numbers)
+                    .setDelayMs(delayMs)
+                    .build();
+            request.writeDelimitedTo(out);
+            System.out.println("[CLIENT] Sent task to Leader.");
 
-            // Read response
-            String response = in.readLine();
-            if (response != null) {
-                handleResponse(response);
+            // Read delimited Protobuf response
+            ResultResponse result = ResultResponse.parseDelimitedFrom(in);
+
+            if (result != null) {
+                System.out.println("[CLIENT] ====== Result ======");
+                System.out.printf("Sum: %d%n", result.getSum());
+                System.out.printf("Single-threaded time: %d ms%n", result.getSingleThreadTimeMs());
+                System.out.printf("Distributed time: %d ms%n", result.getDistributedTimeMs());
+            } else {
+                // Try to parse as ErrorResponse (fallback)
+                ErrorResponse error = ErrorResponse.parseDelimitedFrom(in);
+                if (error != null) {
+                    System.out.printf("[CLIENT] ERROR (%d): %s%n", error.getErrorCode(), error.getMessage());
+                } else {
+                    System.err.println("[CLIENT] Received unrecognized or empty response.");
+                }
             }
 
-        } catch (IOException e) {
+        } catch (Exception e) {
             System.err.println("[CLIENT] Error connecting to Leader: " + e.getMessage());
         }
     }
@@ -56,44 +73,5 @@ public class Client {
                 .map(String::trim)
                 .map(Integer::parseInt)
                 .collect(Collectors.toList());
-    }
-
-    private static void handleResponse(String json) throws IOException {
-        if (json.contains("\"errorCode\"")) {
-            ErrorResponse error = mapper.readValue(json, ErrorResponse.class);
-            System.out.printf("[ERROR] (%d): %s%n", error.errorCode, error.message);
-        } else {
-            ResultResponse result = mapper.readValue(json, ResultResponse.class);
-            System.out.println("[CLIENT] ====== Result ======");
-            System.out.printf("Sum: %d%n", result.sum);
-            System.out.printf("Single-threaded time: %d ms%n", result.singleThreadTimeMs);
-            System.out.printf("Distributed time: %d ms%n", result.distributedTimeMs);
-        }
-    }
-
-    // Internal static classes for serialization
-    static class TaskRequest {
-        public final String type = "TASK_REQUEST";
-        public List<Integer> list;
-        public int delayMs;
-
-        public TaskRequest() {} // Needed for Jackson
-        public TaskRequest(List<Integer> list, int delayMs) {
-            this.list = list;
-            this.delayMs = delayMs;
-        }
-    }
-
-    static class ResultResponse {
-        public String type;
-        public int sum;
-        public int singleThreadTimeMs;
-        public int distributedTimeMs;
-    }
-
-    static class ErrorResponse {
-        public String type;
-        public String message;
-        public int errorCode;
     }
 }

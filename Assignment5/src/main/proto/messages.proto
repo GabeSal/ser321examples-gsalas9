@@ -1,0 +1,32 @@
+syntax = "proto3";
+
+package distributed.protocol;
+
+option java_multiple_files = true;
+option java_package = "distributed.protocol";  // ensures package matches import path
+option java_outer_classname = "Protocol";
+
+message TaskRequest {
+  repeated int32 list = 1;
+  int32 delayMs = 2;
+}
+
+message ResultResponse {
+  int32 sum = 1;
+  int32 singleThreadTimeMs = 2;
+  int32 distributedTimeMs = 3;
+}
+
+message SubtaskRequest {
+  repeated int32 list = 1;
+  int32 delayMs = 2;
+}
+
+message SubtaskResult {
+  int32 sum = 1;
+}
+
+message ErrorResponse {
+  string message = 1;
+  int32 errorCode = 2;
+}

@@ -1,94 +1,68 @@
 # Protocol Specification – Distributed Sum System
 
-This file defines the communication protocol between the `Client`, `Leader`, and `Nodes` for the distributed summation task. Messages can be serialized using **Protocol Buffers** (default) or **JSON** (for debugging or human readability).
+This document defines the communication protocol used in the distributed summation system.
+
+All message serialization uses **Protocol Buffers** (`.proto` definitions compiled via Gradle). See `src/main/proto/messages.proto`.
 
 ---
 
-## General Roles
+## System Roles
 
-- **Client**: Sends a list of integers and a delay value.
-- **Leader**: Accepts tasks, performs local computation, delegates parts to nodes, and validates results via consensus.
-- **Node**: Computes partial sums, may simulate faults.
+| Component  | Responsibilities                                                           |
+|------------|----------------------------------------------------------------------------|
+| **Client** | Sends task request to the Leader                                           |
+| **Leader** | Accepts tasks, computes locally, distributes subtasks, and returns results |
+| **Node**   | Computes subtasks, may simulate faults                                     |
 
 ---
 
-## Client → Leader
+## Protobuf Message Types
 
-### TASK_REQUEST
-```
-{
-  "type": "TASK_REQUEST",
-  "list": [1, 2, 3, ..., 15],
-  "delayMs": 50
+### `TaskRequest` – Client → Leader
+``` proto
+message TaskRequest {
+  repeated int32 list = 1;
+  int32 delayMs = 2;
 }
 ```
 
-## Client → Leader
-
-### RESULT
-```
-{
-  "type": "RESULT",
-  "sum": 120,
-  "singleThreadTimeMs": 850,
-  "distributedTimeMs": 350
+### `ErrorResponse` – Leader → Client
+``` proto
+message ErrorResponse {
+  string message = 1;
+  int32 errorCode = 2;
 }
 ```
 
-### ERROR
-```
-{
-  "type": "ERROR",
-  "message": "Consensus failed. Node disagreement detected.",
-  "errorCode": 1
+### `SubtaskRequest` – Leader → Node
+``` proto
+message SubtaskRequest {
+  repeated int32 list = 1;
+  int32 delayMs = 2;
 }
 ```
 
-## Leader → Node
-
-### SUBTASK
-```
-{
-  "type": "SUBTASK",
-  "list": [1, 2, 3, 4, 5],
-  "delayMs": 50
+### `SubtaskResult` – Node → Leader
+``` proto
+message SubtaskResult {
+  int32 sum = 1;
 }
 ```
 
-### CONSENSUS_VALIDATE
-```
-{
-  "type": "CONSENSUS_VALIDATE",
-  "list": [6, 7, 8, 9, 10],
-  "expectedSum": 40
-}
-```
+## Communication Details
+- All sockets use Protobuf's writeDelimitedTo() / parseDelimitedFrom() methods for safe streaming and framing.
+- Nodes and the leader use persistent TCP socket connections (one request per connection).
+- Fault tolerance can be tested via the -Pwrong=1 argument, simulating incorrect computation (e.g., product instead of sum).
 
-## Node → Leader
-
-### PARTIAL_RESULT
-```
-{
-  "type": "PARTIAL_RESULT",
-  "sum": 65,
-  "nodeId": "Node-3"
-}
-```
-
-### CONSENSUS_RESPONSE
-```
-{
-  "type": "CONSENSUS_RESPONSE",
-  "nodeId": "Node-3",
-  "agrees": true
-}
-```
-
-## Error Codes (Leader → Client)
+## Error Codes – Leader to Client
 | Code | Meaning                        |
 |------|--------------------------------|
 | 1    | Not enough nodes (must be ≥ 3) |
 | 2    | Task computation failed        |
 | 3    | Consensus failure              |
-| 4    | Node communication failed      |
-| 0    | Other/internal error           |
+| 4    | Node communication failure     |
+| 0    | Internal or unknown error      |
+
+### *Notes*
+- JSON-based examples (previously used) have been replaced with Protobuf for compact, efficient messaging.
+- JSON may still be used for debugging if needed, but the system expects Protobuf-encoded streams.

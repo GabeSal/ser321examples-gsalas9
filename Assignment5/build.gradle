@@ -1,14 +1,10 @@
 plugins {
     id 'java'
-    id 'application'
     id 'com.google.protobuf' version '0.9.4'
 }
 
 group = 'edu.distributed'
 version = '1.0-SNAPSHOT'
-
-sourceCompatibility = '21'
-targetCompatibility = '21'
 
 repositories {
     mavenCentral()
@@ -16,7 +12,6 @@ repositories {
 
 dependencies {
     implementation 'com.google.protobuf:protobuf-java:4.28.2'
-    implementation 'com.fasterxml.jackson.core:jackson-databind:2.17.1'
 
     testImplementation 'org.junit.jupiter:junit-jupiter-api:5.10.2'
     testRuntimeOnly 'org.junit.jupiter:junit-jupiter-engine:5.10.2'
@@ -24,15 +19,7 @@ dependencies {
 
 protobuf {
     protoc {
-        artifact = 'com.google.protobuf:protoc:3.25.1'
-    }
-    generatedFilesBaseDir = "$projectDir/build/generated"
-    generateProtoTasks {
-        all().each { task ->
-            task.builtins {
-                java { }
-            }
-        }
+        artifact = 'com.google.protobuf:protoc:4.28.2'
     }
 }
 
@@ -54,11 +41,6 @@ sourceSets {
 
 test {
     useJUnitPlatform()
-}
-
-application {
-    // Default entry point (fallback)
-    mainClass = 'distributed.Main'
 }
 
 def host = project.hasProperty('host') ? project.getProperty('host') : 'localhost'
