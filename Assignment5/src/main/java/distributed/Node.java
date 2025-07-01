@@ -1,12 +1,15 @@
 package distributed;
 
+import distributed.protocol.NodeHello;
 import distributed.protocol.SubtaskRequest;
 import distributed.protocol.SubtaskResult;
 
+import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
 import java.net.Socket;
 import java.util.List;
+import java.util.UUID;
 
 public class Node {
 
@@ -21,43 +24,43 @@ public class Node {
         boolean simulateFault = args.length >= 3 && args[2].equals("1");
 
         try (Socket socket = new Socket(host, port)) {
-            InputStream in = socket.getInputStream();
             OutputStream out = socket.getOutputStream();
+            InputStream in = socket.getInputStream();
 
-            System.out.printf("[NODE] Connected to Leader at %s:%d%n", host, port);
-
-            // Receive subtask via Protobuf
-            SubtaskRequest request = SubtaskRequest.parseDelimitedFrom(in);
-
-            if (request == null) {
-                System.err.println("[NODE] Received empty task.");
-                return;
-            }
-
-            List<Integer> nums = request.getListList();
-            int delay = request.getDelayMs();
-
-            System.out.printf("[NODE] Received task: %s | Delay: %dms | Faulty: %s%n",
-                    nums, delay, simulateFault);
-
-            int result = simulateFault
-                    ? computeFaulty(nums, delay)
-                    : computeWithDelay(nums, delay);
-
-            // Build and send response
-            SubtaskResult response = SubtaskResult.newBuilder()
-                    .setSum(result)
+            // Send handshake
+            NodeHello hello = NodeHello.newBuilder()
+                    .setNodeId("Node-" + UUID.randomUUID())
                     .build();
-            response.writeDelimitedTo(out);
+            hello.writeDelimitedTo(out);
+            System.out.println("[NODE] Sent handshake to Leader.");
 
-            System.out.printf("[NODE] Computation done. Sent result: %d%n", result);
+            while (true) {
+                SubtaskRequest task = SubtaskRequest.parseDelimitedFrom(in);
+                if (task == null) {
+                    System.out.println("[NODE] No more tasks. Closing connection.");
+                    break;
+                }
 
-        } catch (Exception e) {
-            System.err.println("[NODE] Connection error: " + e.getMessage());
+                List<Integer> nums = task.getListList();
+                int delay = task.getDelayMs();
+
+                System.out.printf("[NODE] Received task: %s | Delay: %dms%n", nums, delay);
+
+                int result = simulateFault
+                        ? computeFaulty(nums, delay)
+                        : computeWithDelay(nums, delay);
+
+                SubtaskResult response = SubtaskResult.newBuilder()
+                        .setSum(result)
+                        .build();
+                response.writeDelimitedTo(out);
+            }
+        } catch (IOException e) {
+            System.err.println("[NODE] Error occurred during handshake: " + e.getMessage());
         }
     }
 
-    private static int computeWithDelay(List<Integer> list, int delayMs) {
+    public static int computeWithDelay(List<Integer> list, int delayMs) {
         int sum = 0;
         for (int num : list) {
             sum += num;
@@ -68,7 +71,7 @@ public class Node {
         return sum;
     }
 
-    private static int computeFaulty(List<Integer> list, int delayMs) {
+    public static int computeFaulty(List<Integer> list, int delayMs) {
         int product = 1;
         for (int num : list) {
             product *= num;

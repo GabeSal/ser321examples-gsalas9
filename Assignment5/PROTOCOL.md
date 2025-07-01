@@ -1,8 +1,7 @@
 # Protocol Specification – Distributed Sum System
 
-This document defines the communication protocol used in the distributed summation system.
-
-All message serialization uses **Protocol Buffers** (`.proto` definitions compiled via Gradle). See `src/main/proto/messages.proto`.
+The system uses **Protocol Buffers (proto3)** for structured message exchange over TCP.
+All messages are framed using Protobuf’s `writeDelimitedTo()` and `parseDelimitedFrom()` to ensure message boundaries over streams.
 
 ---
 
@@ -26,11 +25,12 @@ message TaskRequest {
 }
 ```
 
-### `ErrorResponse` – Leader → Client
+### `ResultResponse` – Leader → Client
 ``` proto
-message ErrorResponse {
-  string message = 1;
-  int32 errorCode = 2;
+message ResultResponse {
+  int32 sum = 1;
+  int32 singleThreadTimeMs = 2;
+  int32 distributedTimeMs = 3;
 }
 ```
 
@@ -46,6 +46,22 @@ message SubtaskRequest {
 ``` proto
 message SubtaskResult {
   int32 sum = 1;
+  string node_id = 2;
+}
+```
+
+### `NodeHello` – Node → Leader (handshake)
+``` proto
+message NodeHello {
+  string nodeId = 1;
+}
+```
+
+### `ErrorResponse` – Leader → Client
+``` proto
+message ErrorResponse {
+  string message = 1;
+  int32 errorCode = 2;
 }
 ```
 
@@ -55,14 +71,14 @@ message SubtaskResult {
 - Fault tolerance can be tested via the -Pwrong=1 argument, simulating incorrect computation (e.g., product instead of sum).
 
 ## Error Codes – Leader to Client
-| Code | Meaning                        |
-|------|--------------------------------|
-| 1    | Not enough nodes (must be ≥ 3) |
-| 2    | Task computation failed        |
-| 3    | Consensus failure              |
-| 4    | Node communication failure     |
-| 0    | Internal or unknown error      |
+| Code | Meaning                         |
+|------|---------------------------------|
+| 1    | Not enough nodes (minimum is 3) |
+| 2    | Task computation failed         |
+| 3    | Consensus failure               |
+| 4    | Node communication failure      |
+| 0    | Internal or unknown error       |
 
-### *Notes*
-- JSON-based examples (previously used) have been replaced with Protobuf for compact, efficient messaging.
-- JSON may still be used for debugging if needed, but the system expects Protobuf-encoded streams.
+### *Additional Notes*
+- Nodes can simulate failure or incorrect output using the `-Pwrong=1` flag.
+- Message exchange assumes blocking socket communication and one message per connection phase.

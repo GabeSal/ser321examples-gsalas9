@@ -24,6 +24,11 @@ message SubtaskRequest {
 
 message SubtaskResult {
   int32 sum = 1;
+  string node_id = 2;
+}
+
+message NodeHello {
+  string nodeId = 1;
 }
 
 message ErrorResponse {

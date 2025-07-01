@@ -44,7 +44,9 @@ test {
 }
 
 def host = project.hasProperty('host') ? project.getProperty('host') : 'localhost'
-def port = project.hasProperty('port') ? project.getProperty('port') : '8500'
+def clientPort = project.hasProperty('clientPort') ? project.getProperty('clientPort') : '8500'
+def nodePort = project.hasProperty('nodePort') ? project.getProperty('nodePort') : '8600'
+def delayMs = project.hasProperty('delayMs') ? project.getProperty('delayMs') : '50'
 def wrong = project.hasProperty('wrong') ? project.getProperty('wrong') : '0'
 
 // CLI Tasks
@@ -52,22 +54,24 @@ tasks.register('runClient', JavaExec) {
     group = 'application'
     description = 'Runs the distributed Client'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass.set('distributed.client.Client')
-    args host, port
+    mainClass.set('distributed.Client')
+    args host, clientPort, delayMs
+
+    standardInput = System.in;
 }
 
 tasks.register('runLeader', JavaExec) {
     group = 'application'
     description = 'Runs the Leader node'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass.set('distributed.leader.Leader')
-    args port
+    mainClass.set('distributed.Leader')
+    args clientPort, nodePort   // example: 8500 for clients, 8600 for nodes
 }
 
 tasks.register('runNode', JavaExec) {
     group = 'application'
     description = 'Runs a Node (worker)'
     classpath = sourceSets.main.runtimeClasspath
-    mainClass.set('distributed.node.Node')
-    args host, port, wrong
+    mainClass.set('distributed.Node')
+    args host, nodePort, wrong
 }

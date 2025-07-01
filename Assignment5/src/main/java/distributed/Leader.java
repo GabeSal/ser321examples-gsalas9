@@ -1,48 +1,80 @@
 package distributed;
 
-import distributed.protocol.TaskRequest;
-import distributed.protocol.ResultResponse;
-import distributed.protocol.SubtaskRequest;
-import distributed.protocol.SubtaskResult;
-import distributed.protocol.ErrorResponse;
+import distributed.protocol.*;
 
 import java.io.*;
 import java.net.ServerSocket;
 import java.net.Socket;
 import java.util.*;
+import java.util.concurrent.ConcurrentHashMap;
 
 public class Leader {
+
+    private static final List<NodeConnection> connectedNodes = Collections.synchronizedList(new ArrayList<>());
 
     /**
      * Entry point of the Leader process.
      * Opens a server socket to accept incoming Client task requests.
      */
     public static void main(String[] args) {
-        if (args.length < 1) {
-            System.out.println("[LEADER] Usage: java Leader <port>");
+        if (args.length < 2) {
+            System.out.println("[LEADER] Usage: java Leader <clientPort> <nodePort>");
             return;
         }
 
-        int port = Integer.parseInt(args[0]);
+        int clientPort = Integer.parseInt(args[0]);
+        int nodePort = Integer.parseInt(args[1]);
 
-        try (ServerSocket serverSocket = new ServerSocket(port)) {
-            System.out.printf("[LEADER] Listening on port %d...%n", port);
+        try (
+            ServerSocket clientSocket = new ServerSocket(clientPort);
+            ServerSocket nodeSocket = new ServerSocket(nodePort)
+        ) {
+            new Thread(() -> {
+                while (true) {
+                    Socket ns = null;
+                    try {
+                        ns = nodeSocket.accept();
+                    } catch (IOException e) {
+                        throw new RuntimeException(e);
+                    }
+                    handleNodeConnection(ns);
+                }
+            }).start();
 
             while (true) {
-                Socket clientSocket = serverSocket.accept();
-                System.out.println("[LEADER] Client connected.");
-
+                Socket cs = clientSocket.accept();
                 new Thread(() -> {
                     try {
-                        handleClient(clientSocket);
+                        handleClient(cs);
                     } catch (InterruptedException e) {
-                        System.err.println("[LEADER] Interrupted while handling client: " + e.getMessage());
-                        Thread.currentThread().interrupt();
+                        throw new RuntimeException(e);
                     }
                 }).start();
             }
         } catch (IOException e) {
-            System.err.println("[LEADER] Server error: " + e.getMessage());
+            System.err.println("[LEADER] Error encountered while connecting to client/node: " + e.getMessage());
+        }
+    }
+
+    private static void handleNodeConnection(Socket socket) {
+        try {
+            InputStream in = socket.getInputStream();
+            OutputStream out = socket.getOutputStream();
+
+            NodeHello hello = NodeHello.parseDelimitedFrom(in);
+            if (hello == null) {
+                System.err.println("[LEADER] Failed to receive handshake from node.");
+                return;
+            }
+
+            NodeConnection node = new NodeConnection(socket, in, out, hello.getNodeId());
+            connectedNodes.add(node);
+
+            System.out.printf("[LEADER] Registered Node %s (%d total)%n",
+                hello.getNodeId(), connectedNodes.size());
+
+        } catch (IOException e) {
+            System.err.println("[LEADER] Node connection failed: " + e.getMessage());
         }
     }
 
@@ -54,8 +86,15 @@ public class Leader {
         try (InputStream in = socket.getInputStream();
              OutputStream out = socket.getOutputStream()) {
 
-            TaskRequest request = TaskRequest.parseFrom(in);
-            System.out.printf("[LEADER] Received task: %s | Delay: %dms%n", request.getListList(), request.getDelayMs());
+            System.out.println("[LEADER] Waiting for TaskRequest...");
+            TaskRequest request = TaskRequest.parseDelimitedFrom(in);
+            if (request == null) {
+                System.err.println("[LEADER] No TaskRequest received. Exiting handler.");
+                return;
+            }
+
+            System.out.printf("[LEADER] Received TaskRequest: list=%s | delayMs=%d%n",
+                request.getListList(), request.getDelayMs());
 
             // --- Local computation (non-distributed) ---
             long localStart = System.currentTimeMillis();
@@ -64,51 +103,79 @@ public class Leader {
             int localDuration = (int) (localEnd - localStart);
             System.out.printf("[LEADER] Local sum: %d | Time: %dms%n", localSum, localDuration);
 
-            // --- Distributed computation via nodes ---
-            int numNodes = 3;
-            if (numNodes < 3) {
+            int requiredNodes = Math.min(connectedNodes.size(), 3);
+            if (connectedNodes.size() < 3) {
                 ErrorResponse error = ErrorResponse.newBuilder()
                         .setMessage("Not enough nodes (min: 3)")
                         .setErrorCode(1)
                         .build();
-                error.writeTo(out);
+                error.writeDelimitedTo(out);
+                out.flush();
                 return;
             }
 
-            List<List<Integer>> partitions = partitionList(request.getListList(), numNodes);
-            System.out.println("[LEADER] Dispatching subtasks to nodes...");
+            List<NodeConnection> activeNodes = connectedNodes.subList(0, requiredNodes);
+            List<List<Integer>> partitions = partitionList(request.getListList(), connectedNodes.size());
+            System.out.println("[LEADER] Dispatching subtasks to registered nodes...");
 
-            Map<Integer, Integer> partialResults = Collections.synchronizedMap(new HashMap<>());
+            Map<String, Integer> partialResults = new ConcurrentHashMap<>();
             List<Thread> threads = new ArrayList<>();
 
-            int baseNodePort = 8601;
-            long distStart = System.currentTimeMillis();
-            for (int i = 0; i < numNodes; i++) {
-                List<Integer> subList = partitions.get(i);
-                int nodePort = baseNodePort + i;
-                Thread t = new Thread(new NodeWorker("localhost", nodePort, subList, request.getDelayMs(), i + 1, partialResults));
+            long distributedStart = System.currentTimeMillis();
+
+            for (int i = 0; i < activeNodes.size(); i++) {
+                NodeConnection node = activeNodes.get(i);
+                List<Integer> part = partitions.get(i);
+                Thread t = new Thread(() -> {
+                    try {
+                        SubtaskRequest subtask = SubtaskRequest.newBuilder()
+                            .addAllList(part)
+                            .setDelayMs(request.getDelayMs())
+                            .build();
+                        subtask.writeDelimitedTo(node.out);
+                        node.out.flush();
+
+                        SubtaskResult result = SubtaskResult.parseDelimitedFrom(node.in);
+                        partialResults.put(node.nodeId, result.getSum());
+                        System.out.printf("[LEADER] Node %s responded: %d%n", node.nodeId, result.getSum());
+                    } catch (IOException e) {
+                        System.err.printf("[LEADER] Failed to dispatch to Node %s: %s%n", node.nodeId, e.getMessage());
+                        connectedNodes.remove(node);
+                    }
+                });
                 threads.add(t);
                 t.start();
             }
 
-            for (Thread t : threads) {
-                t.join();
-            }
-            long distEnd = System.currentTimeMillis();
-            int distDuration = (int) (distEnd - distStart);
+            for (Thread t : threads) t.join();
 
-            System.out.println("[LEADER] All node responses received.");
+            long distributedEnd = System.currentTimeMillis();
+            int distributedTime = (int) (distributedEnd - distributedStart);
+
+            // --- Consensus Check ---
+            Set<Integer> uniqueResults = new HashSet<>(partialResults.values());
+            if (uniqueResults.size() != partialResults.size()) {
+                System.err.println("[LEADER] Consensus failure detected: duplicate or inconsistent partial results.");
+                ErrorResponse error = ErrorResponse.newBuilder()
+                        .setMessage("Consensus check failed: inconsistent node responses.")
+                        .setErrorCode(3)
+                        .build();
+                error.writeDelimitedTo(out);
+                return;
+            }
+
             int totalDistributedSum = partialResults.values().stream().mapToInt(Integer::intValue).sum();
-            System.out.println("[LEADER] Total distributed sum: " + totalDistributedSum);
+            System.out.printf("[LEADER] Distributed result: %d | Local result: %d%n", totalDistributedSum, localSum);
 
             // --- Respond to Client with results ---
             ResultResponse result = ResultResponse.newBuilder()
-                    .setSum(totalDistributedSum)
-                    .setSingleThreadTimeMs(localDuration)
-                    .setDistributedTimeMs(distDuration)
-                    .build();
+                .setSum(totalDistributedSum)
+                .setSingleThreadTimeMs(localDuration)
+                .setDistributedTimeMs(distributedTime)
+                .build();
 
-            result.writeTo(out);
+            result.writeDelimitedTo(out);
+            out.flush();
             System.out.println("[LEADER] Sent result to client.");
 
         } catch (IOException e) {
@@ -119,7 +186,7 @@ public class Leader {
     /**
      * Performs a simple sum of a list of integers, with an artificial delay between additions.
      */
-    private static int computeWithDelay(List<Integer> list, int delayMs) {
+    public static int computeWithDelay(List<Integer> list, int delayMs) {
         int sum = 0;
         for (int num : list) {
             sum += num;
@@ -131,67 +198,39 @@ public class Leader {
     }
 
     /**
-     * Evenly partitions a list into N parts for distribution to nodes.
+     * Evenly and smartly partitions a list into up to N parts.
+     * Nodes may receive uneven sizes, but all input data is used.
      */
-    private static List<List<Integer>> partitionList(List<Integer> list, int parts) {
-        int size = list.size();
-        int chunkSize = size / parts;
-        int remainder = size % parts;
+    public static List<List<Integer>> partitionList(List<Integer> input, int nodeCount) {
+        int totalSize = input.size();
+        int actualPartitions = Math.min(nodeCount, totalSize); // Don't create empty partitions
 
-        List<List<Integer>> result = new ArrayList<>();
+        List<List<Integer>> result = new ArrayList<>(actualPartitions);
+        int baseSize = totalSize / actualPartitions;
+        int remainder = totalSize % actualPartitions;
+
         int index = 0;
-        for (int i = 0; i < parts; i++) {
-            int currentChunkSize = chunkSize + (i < remainder ? 1 : 0);
-            result.add(list.subList(index, index + currentChunkSize));
-            index += currentChunkSize;
+        for (int i = 0; i < actualPartitions; i++) {
+            int partSize = baseSize + (i < remainder ? 1 : 0); // Spread remainder fairly
+            List<Integer> part = input.subList(index, index + partSize);
+            result.add(new ArrayList<>(part));
+            index += partSize;
         }
+
         return result;
     }
 
-    /**
-     * Threaded task sender that communicates with a specific Node.
-     * Sends a subtask and waits for the partial sum response.
-     */
-    static class NodeWorker implements Runnable {
-        private final String host;
-        private final int port;
-        private final List<Integer> list;
-        private final int delayMs;
-        private final int nodeId;
-        private final Map<Integer, Integer> results;
+    static class NodeConnection {
+        final Socket socket;
+        final OutputStream out;
+        final InputStream in;
+        final String nodeId;
 
-        public NodeWorker(String host, int port, List<Integer> list, int delayMs,
-                          int nodeId, Map<Integer, Integer> results) {
-            this.host = host;
-            this.port = port;
-            this.list = list;
-            this.delayMs = delayMs;
+        NodeConnection(Socket socket, InputStream in, OutputStream out, String nodeId) {
+            this.socket = socket;
+            this.in = in;
+            this.out = out;
             this.nodeId = nodeId;
-            this.results = results;
-        }
-
-        @Override
-        public void run() {
-            try (Socket socket = new Socket(host, port);
-                 OutputStream out = socket.getOutputStream();
-                 InputStream in = socket.getInputStream()) {
-
-                SubtaskRequest.Builder request = SubtaskRequest.newBuilder()
-                        .addAllList(list)
-                        .setDelayMs(delayMs);
-                request.build().writeTo(out);
-
-                SubtaskResult result = SubtaskResult.parseFrom(in);
-
-                synchronized (results) {
-                    results.put(nodeId, result.getSum());
-                }
-
-                System.out.printf("[LEADER] Node %d responded: %d%n", nodeId, result.getSum());
-
-            } catch (IOException e) {
-                System.err.printf("[LEADER] Failed to reach Node %d on port %d: %s%n", nodeId, port, e.getMessage());
-            }
         }
     }
 }
