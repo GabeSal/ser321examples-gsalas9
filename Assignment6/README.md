@@ -1,61 +1,129 @@
-# GRPC Services and Registry
+# gRPC Services & Registry (Assignment 6)
 
-The following folder contains a Registry.jar which includes a Registering service where Nodes can register to allow clients to find them and use their implemented GRPC services. 
+This project implements five gRPC services plus a JSON/Protobuf registry:
+- **Echo** – simple “parrot” service
+- **Joke** – joke‐of‐the‐day service
+- **Password** (Caesar) – in-memory encrypted storage
+- **Weather** – current & 5-day forecast via OpenWeatherMap
+- **Notes** – simple create/list/delete note store
 
-Some more detailed explanations will follow and please also check the build.gradle file
+All services speak **gRPC** over HTTP/2, with Protocol Buffers for message definitions (under `src/main/proto/services`).
 
-## Run things locally without registry
-To run see also video. To run locally and without Registry which you should do for the beginning
+---
 
-First Terminal
+## Prerequisites
 
-    gradle runNode
+- **Java 21** JDK
+- **Gradle 8.14.1** (or via the Gradle wrapper)
+- **Windows 11 / macOS / Linux**
+- **OpenWeatherMap API key** (free tier) for the Weather service
 
-Second Terminal
+    1. You can utilize my active API key value: *49d0d41aea6d13c9f8e9c05e0c389081* or...
+    2. Sign up at https://openweathermap.org/
+    3. Copy your key and store it in your local Gradle properties.
 
-    gradle runClient
+       ```properties
+       # in ~/.gradle/gradle.properties or project-root/gradle.properties (git-ignored)
+       openWeatherApiKey=YOUR_OPENWEATHER_API_KEY
+       ```
 
-## Run things locally with registry
+Gradle will inject this as `OPENWEATHER_API_KEY` into the test & server JVMs. Please note that you must set the 
+environment variable, `OPENWEATHER_API_KEY`, in your IDE or as a temporary variable within the command prompt before
+running the Node task.
 
-First terminal
+---
 
-    gradle runRegistryServer
+## Build
 
-Second terminal
+``` bash
+# from project root
+./gradlew clean build
+```
+This compiles all Java, generates gRPC/Protobuf stubs, and runs the JUnit suite (if a server is running or embedded).
 
-    gradle runNode -PregOn=true 
+## Running the Registry
 
-Third Terminal
+We provide a multiprotocol “registry” on two ports:
+- Protobuf registry (gRPC) on port 9000
+- JSON registry (plain TCP+JSON) on port 9001
 
-    gradle runClient -PregOn=true
+You can launch it with:
+``` bash
+./gradlew runRegistryServer
+```
+(The registry will then accept `Register/GetServices/FindServer/FindServers` requests.)
 
-### gradle runRegistryServer
-Will run the Registry node on localhost (arguments are possible see gradle). This node will run and allows nodes to register themselves. 
+## Running a Service Node
+By default, nodes run on gRPC port 9002 (JSON discovery port 10000). You can turn registry registration on/off:
+``` bash
+# registry OFF (default)
+./gradlew runNode
 
-The Server allows Protobuf, JSON and gRPC. We will only be using gRPC
+# registry ON
+./gradlew runNode -PregOn=true
 
-### gradle runNode
-Will run a node with an Echo and Joke service. The node registers itself on the Registry. You can change the host and port the node runs on and this will register accordingly with the Registry
+```
 
-### gradle runClient
-Will run a client which will call the services from the node, it talks to the node directly not through the registry. At the end the client does some calls to the Registry to pull the services, this will be needed later.
+You can override ports/hosts via Gradle properties, e.g.;
+``` bash
+./gradlew runNode \
+  -PregOn=true \
+  -PgrpcPort=8080 \
+  -PregistryHost=registry.example.com \
+  -PregistryJsonPort=9001 \
+  -PserviceHost=127.0.0.1 \
+  -PservicePort=8000
+```
 
-### gradle runDiscovery
-Will create a couple of threads with each running a node with services in JSON and Protobuf. This is just an example and not needed for assignment 6. 
+## Running the Client
+The same CLI can run in **interactive** or **auto** mode:
+``` bash
+# interactive REPL (menu-driven)
+./gradlew runClient
 
-### gradle testProtobufRegistration
-Registers the protobuf nodes from runDiscovery and do some calls. 
+# “auto” mode exercises all services & error paths, then exits
+./gradlew runClient -Pauto=1
+```
 
-### gradle testJSONRegistration
-Registers the json nodes from runDiscovery and do some calls. 
+If you used `-PregOn=true` on the server, pass that to the client as well so it can look up services via the registry:
+``` bash
+./gradlew runClient -PregOn=true -Pauto=1
+```
 
-### gradle test
-Runs the test cases for Joke and Echo. It expects a new start of the server before running the tests!
-First run
-    gradle runNode
-then in second terminal
-    gradle test
+---
 
-To run in IDE:
-- go about it like in the ProtoBuf assignment to get rid of errors
-- all mains expect input, so if you want to run them in your IDE you need to provide the inputs for them, see build.gradle
+## Gradle Tasks Overview
+| **Task**                   | **Description**                                                    |
+|----------------------------|--------------------------------------------------------------------|
+| `runRegistryServer`        | Start JSON+Protobuf registry on ports 9001 (JSON) & 9000 (gRPC)    |
+| `runNode`                  | Start a service node (Echo, Joke, Password, Weather, Notes)        |
+| `runClient`                | Start the CLI client (interactive or `-Pauto=1` script mode)       |
+| `runDiscovery`             | (Demo) fire up dummy services for registry examples                |
+| `testJsonRegistration`     | Register & query services via JSON protocol                        |
+| `testProtobufRegistration` | Register & query services via Protobuf                             |
+| `test`                     | Run all unit tests (includes `ServerTest`, service‐specific tests) |
+
+## Protocol Buffers & gRPC
+- All messages are defined under src/main/proto/services/*.proto
+- Gradle’s protobuf plugin generates:
+  - `service.*Grpc` stubs
+  - `service.*` message classes
+- Services communicate over **HTTP/2** using gRPC’s binary framing and Protobuf marshalling.
+- Clients use blocking stubs (synchronous RPCs) but you can also use async/future stubs.
+
+---
+
+## Tests
+
+### Embedded-server tests
+Our JUnit tests spin up an in-process gRPC server so you don’t need to manually launch runNode:
+
+- ServerTest – Echo & Joke
+- PasswordServiceTest – Caesar
+- WeatherServiceTest – Weather (skipped if `OPENWEATHER_API_KEY` is unset)
+- NoteServiceTest – Notes
+
+Run them with:
+``` bash
+./gradlew test
+```
