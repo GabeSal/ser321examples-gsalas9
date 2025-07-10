@@ -1,0 +1,35 @@
+// A dice simulator where you can roll differnt type of dice
+
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "service";
+option java_outer_classname = "DiceProto";
+
+package services;
+import "google/protobuf/empty.proto";
+
+service Dice {
+  rpc singleroll (SingleRequest) returns (DiceResponse) {}                //roll multiple versions of one type of dice 
+  rpc tripleroll (TripleRequest) returns (DiceResponse) {}                      //rolls multiple types of dice
+}
+
+// REQUEST: Roll one type of dice
+message SingleRequest {
+    int32 type = 1; // Type of dice
+    int32 num = 2; // Number of dice
+}
+
+// REQUEST: Roll multiple types of dice
+message TripleRequest {
+  int32 type1 = 1; // First type of dice
+  int32 type2 = 2; // Second type of dice
+  int32 type3 = 3; // Third type of dice
+  int32 num = 4; // Num of all dice
+}
+
+// RESPONSE: Dice response
+message DiceResponse {
+  repeated int32 dice = 1; // All dice results
+}

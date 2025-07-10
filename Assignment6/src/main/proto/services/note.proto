@@ -1,0 +1,48 @@
+syntax = "proto3";
+
+package service;
+option java_multiple_files = true;
+option java_package       = "service";
+option java_outer_classname = "NoteProto";
+
+import "google/protobuf/empty.proto";
+
+// A simple note-taking service that stores text notes by ID.
+service NoteService {
+  // Create a new note.  Returns an auto-generated ID.
+  rpc CreateNote(CreateNoteRequest) returns (CreateNoteResponse);
+
+  // List *all* saved notes.
+  rpc GetNotes(google.protobuf.Empty) returns (GetNotesResponse);
+
+  // (Optional) Remove a note by its ID.
+  rpc DeleteNote(DeleteNoteRequest) returns (DeleteNoteResponse);
+}
+
+message CreateNoteRequest {
+  string note = 1; // the body of the note
+}
+
+message CreateNoteResponse {
+  bool   ok  = 1;  // did the create succeed?
+  int64  id  = 2;  // the new note’s ID
+  string error = 3;// only populated if ok==false
+}
+
+message GetNotesResponse {
+  repeated Note notes = 1; // all stored notes
+}
+
+message Note {
+  int64  id   = 1;
+  string note = 2;
+}
+
+message DeleteNoteRequest {
+  int64 id = 1;
+}
+
+message DeleteNoteResponse {
+  bool   ok    = 1;
+  string error = 2; // if ok==false
+}

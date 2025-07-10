@@ -1,0 +1,48 @@
+// A zoo simulator where you can add animals and hear them speak.
+
+
+syntax = "proto3";
+
+option java_multiple_files = true;
+option java_package = "service";
+option java_outer_classname = "ZooProto";
+
+package services;
+import "google/protobuf/empty.proto";
+
+service Zoo {
+  rpc add (AddAnimalRequest) returns (AddAnimalResponse) {}                //Add animals to the zoo 
+  rpc speak (SpeakRequest) returns (SpeakResponse) {}                      //Make animal speak
+  rpc speakAll (google.protobuf.Empty) returns (SpeakResponse) {}       //Make all animals speak
+}
+
+// REQUEST: Add an animal
+message AddAnimalRequest {
+    Animal animal = 1; // Animal to add to the zoo
+}
+
+// RESPONSE: Add an animal response
+message AddAnimalResponse {
+  bool isSuccess = 1; // if animal was added response is true, else it is false.
+  string message = 2; // Message stating the animal was added.
+  string error = 3;   // Error message if isSuccess is false
+}
+
+// REQUEST: Request for a specific animal to speak
+message SpeakRequest {
+  string name = 1; // Name of animal to speak
+}
+
+// RESPONSE: Animals response
+message SpeakResponse {
+  bool isSuccess = 1; //true if the request was successful and at least one animal of that name exists else it is false.
+  repeated string animals = 2; //Animals speaking. Repeated due to multiple animals possibly having the same name.
+  string error = 3; //Error message if isSuccess is false
+}
+
+// Animal
+message Animal {
+   string name = 1; //Name of animal.
+   string type = 2; //Type of animal such as lion, hippo, etc...
+   string animalSound = 3; //Sound the animal makes.
+}
